@@ -1,4 +1,5 @@
 #include "segment.h"
+#include <random>
 #include <fstream>
 Segment::Segment(vector<Input*> In_,vector<Lattice*> Lat_, string name_,int segnr,int N_seg) {
 	In=In_; Lat=Lat_; name=name_; n_seg=N_seg; seg_nr=segnr; prepared = 0;
@@ -16,6 +17,11 @@ if (debug) cout <<"Segment constructor" + name << endl;
 	KEYS.push_back("clamp_filename");
 	KEYS.push_back("sub_box_size");
 	KEYS.push_back("clamp_info");
+	KEYS.push_back("fluctuation_potentials");
+	KEYS.push_back("fluctuation_amplitude");
+	KEYS.push_back("fluctuation_wavelength");
+	Amplitude=0; labda=0;
+	ns=1;
 }
 Segment::~Segment() {
 if (debug) cout <<"Segment destructor " + name << endl;
@@ -32,6 +38,7 @@ if (debug) cout << "In Segment, Deallocating memory " + name << endl;
 		 free(r);
 	}
 	free(H_u);
+	free(H_u_ext);
 	free(H_phi);
 	free(H_MASK);
 	free(H_alpha);
@@ -40,6 +47,7 @@ if (debug) cout << "In Segment, Deallocating memory " + name << endl;
 #ifdef CUDA
 	if(n_pos>0) cudaFree(P);
 	cudaFree(u);
+	cudaFree(u_ext);
 	cudaFree(phi);
 	cudaFree(phi_state);
 	cudaFree(G1);
@@ -58,6 +66,7 @@ if (debug) cout <<"Allocate Memory in Segment " + name << endl;
 	H_u = (Real*) malloc(M*ns*sizeof(Real));
 	H_phi_state = (Real*) malloc(M*ns*sizeof(Real));
 	H_phi = (Real*) malloc(M*sizeof(Real));
+	H_u_ext = (Real*) malloc(M*sizeof(Real));
 	H_alpha=(Real*) malloc(M*ns*sizeof(Real));
 	H_Zero(H_u,M*ns);
 	H_Zero(H_phi,M);
@@ -73,6 +82,7 @@ if (debug) cout <<"Allocate Memory in Segment " + name << endl;
 	phi_state=(Real*)AllOnDev(M*ns); Zero(phi_state,M*ns);
 	MASK=(int*)AllIntOnDev(M); Zero(MASK,M);
 	phi=(Real*)AllOnDev(M); Zero(phi,M);
+	u_ext=(Real*)AllOnDev(M); Zero(u_ext,M);
 	phi_side=(Real*)AllOnDev(ns*M); Zero(phi_side,ns*M);
 	alpha=(Real*)AllOnDev(ns*M); Zero(alpha,ns*M);
 #else
@@ -80,6 +90,8 @@ if (debug) cout <<"Allocate Memory in Segment " + name << endl;
 	MASK=H_MASK;
 	phi =H_phi;
 	u = H_u;
+	u_ext=H_u_ext; Zero(u_ext,M);
+	KEYS.push_back("fluctuation_coordinates");
 	phi_state = H_phi_state;
 	alpha=H_alpha;
 	G1 = (Real*)malloc(M*sizeof(Real));
@@ -89,9 +101,8 @@ if (debug) cout <<"Allocate Memory in Segment " + name << endl;
 #endif
 }
 
-bool Segment::PrepareForCalculations(int* KSAM) {
+bool Segment::PrepareForCalculations(int* KSAM, bool first_time) {
 if (debug) cout <<"PrepareForCalcualtions in Segment " +name << endl;
-
 	int M=Lat[0]->M;
 #ifdef CUDA
 	if (In[0]->MesodynList.empty() or prepared == false) {
@@ -112,7 +123,6 @@ if (debug) cout <<"PrepareForCalcualtions in Segment " +name << endl;
 	if (freedom=="frozen") {
 		Cp(phi,MASK,M);
 	} else Zero(phi,M);
-
 
 	if (freedom=="tagged" || freedom=="clamp" ) Zero(u,M); //no internal states for these segments.
 
@@ -135,8 +145,149 @@ if (debug) cout <<"PrepareForCalcualtions in Segment " +name << endl;
 	}
 	if (!(freedom ==" frozen" || freedom =="tagged")) Times(G1,G1,KSAM,M);
 
+	if (GetValue("fluctuation_potentials").size()>0&& first_time) {
+		string s = GetValue("fluctuation_potentials");
+		vector<string> sub;
+		In[0]->split(s, ',', sub);
+		if (sub.size()<3) {success=false; cout <<"expecting in 'mon : " + name + " : fluctuation_potentials : '  coordinate info, such as: x,y,5 or x,y,z "<<endl; }
+		else {
+			if (sub[0] != "x" || sub[1] != "y" ) {success=false; cout <<"expecting in 'mon : " + name + " : fluctuation_potentials : '  first two coordinates to be : x,y  "<<endl; }
+			int MX=Lat[0]->MX;
+			int JX=Lat[0]->JX;
+			int MY=Lat[0]->MY;
+			int JY=Lat[0]->JY;
+			//int M=Lat[0]->M;
+			if (first_time){
+				if (sub[2] == "z") {
+					int MZ=Lat[0]->MZ;
+					if (!(MZ==2 || MZ==4 || MZ==8 || MZ==16 ||MZ==32 || MZ==64 ||MZ==128 || MZ==256 || MZ==512 || MZ==1024)) {success=false; cout << "Expecting n_layers_z to have a value 2^a with a = 1..10" << endl; }
+					if (success) {
+						Real shift_x,shift_y,shift_z;
+						for (int lambda_x=2; lambda_x <=MX; lambda_x*=2)
+						for (int lambda_y=2; lambda_y <=MY; lambda_y*=2)
+						for (int lambda_z=2; lambda_z <=MZ; lambda_z*=2){
+							shift_x = rand() % lambda_x;
+							shift_y = rand() % lambda_y;
+							shift_z = rand() % lambda_z;
+							for (int x=0; x<MX; x++) for (int y=0; y<MY; y++) for (int z=0; z<MZ; z++) {
+								u_ext[x*JX+y*JY+MZ]+=Amplitude*(sin(2.0*PIE*(x+shift_x)/lambda_x)+sin(2.0*PIE*(y+shift_y)/lambda_y)+sin(2.0*PIE*(z+shift_z)/lambda_z));
+							}
+						}
+					}
+				} else {
+					int mz=In[0]->Get_int(sub[2],0);
+					if (mz<1 || mz>Lat[0]->MZ) {success=false; cout <<"expecting in 'mon : " + name + " : fluctuation_potentials : '  z-coordinate to be in z-range "<<endl; }
+					if (success && labda ==0) {
+					cout <<"fluctutions set " << Amplitude << endl;
+						Real shift_x,shift_y;
+						for (int lambda_x=2; lambda_x <=MX; lambda_x*=2)
+						for (int lambda_y=2; lambda_y <=MY; lambda_y*=2){
+							shift_x = rand() % lambda_x;
+							shift_y = rand() % lambda_y;
+							for (int x=0; x<MX; x++) for (int y=0; y<MY; y++) {
+								u_ext[x*JX+y*JY+mz]+=Amplitude*(sin(2.0*PIE*(x+shift_x)/lambda_x)+sin(2.0*PIE*(y+shift_y)/lambda_y));
+							}
+						}
+					} else {
+						if (labda>0) {
+							cout <<"fluctuation wavelength set to " << labda << " and amplitude to " << Amplitude << endl;
+							for (int x=0; x<MX; x++) for (int y=0; y<MY; y++)
+									u_ext[x*JX+y*JY+mz]+=Amplitude*(sin(2.0*PIE*(x)/labda)+sin(2.0*PIE*(y)/labda));
+						}
+					}
+				}
+			}
+		}
+	}
+//for (int kkk=0; kkk<M; kkk++) if (u_ext[kkk] !=0) cout <<"at " << kkk << " : " << u_ext[kkk] << endl;
 	return success;
 }
+
+bool Segment::PutAdsorptionGuess(Real chi,int* Mask) {
+if (debug) cout <<"PutAdsorptionGuess" + name << endl;
+	bool success=true;
+	Real lambda;
+	if (Lat[0]->lattice_type=="hexagonal") lambda=0.25; else lambda=1.0/6.0;
+	int gradients=Lat[0]->gradients;
+	int M=Lat[0]->M;
+	int MX=Lat[0]->MX;
+	int MY=Lat[0]->MY;
+	int MZ=Lat[0]->MZ;
+	int JX=Lat[0]->JX;
+	int JY=Lat[0]->JY;
+	switch(gradients) {
+		case 1:
+			for (int x=1; x<MX+1; x++)
+				if (Mask[x-1]==1 ||Mask[x+1]==1)
+					u[x]=-lambda*chi;
+			break;
+		case 2:
+			for (int x=1; x<MX+1; x++) for (int y=1; y<MY+1; y++)
+				if (Mask[(x-1)*JX+y]==1 ||Mask[(x+1)*JX+y]==1 || Mask[x*JX+y-1]==1 || Mask[x*JX+y+1]==1)
+					u[x*JX+y]=-lambda*chi;
+			break;
+		case 3:
+			for (int x=1; x<MX+1; x++) for (int y=1;y<MY+1; y++) for (int z=1; z<MZ+1; z++)
+				if (Mask[(x-1)*JX+y*JY+z]==1 ||Mask[(x+1)*JX+y*JY+z]==1 || Mask[x*JX+(y-1)*JY+z]==1 || Mask[x*JX+(y+1)*JY+z]==1 || Mask[x*JX+y*JY+z-1]==1 || Mask[x*JX+y*JY+z+1]==1)
+					u[x*JX+y*JY+z]=-lambda*chi;
+			break;
+		default:
+			break;
+	}
+	Boltzmann(G1,u,M);
+	return success;
+}
+
+bool Segment::PutTorusPotential(int sign) {
+if (!debug) cout <<"PutTorusPotential" + name << endl;
+	bool success=true;
+	Real distance=0;
+	int count=0;
+	Real L=0;
+	int M=Lat[0]->M;
+	int MX=Lat[0]->MX;
+	int MY=Lat[0]->MY;
+	int JX=Lat[0]->JX;
+	int R_offset=Lat[0]->offset_first_layer;
+	Real R_center = R_offset + MX/2.0;
+	Real R=R_center/sqrt(2.0);
+	if (R<MX/2.0) {
+		for (int x=1; x<MX+1; x++) for (int y=1; y<MY+1; y++) {
+	 		distance = sqrt((MX/2.0 -x)*(MX/2.0-x) + y*y);
+			if ((distance-R)*(distance-R)<3) {
+				u[x*JX+y]=-log(1.8)*sign; count++;
+				//cout << "at x " << x << "and y " << y << "potential is set" << endl;
+			}
+		}
+		int ylast=0;
+		int xlow=0,xhigh=0;
+		for (int y=1; y<MY+1; y++) {
+			bool neg_found=false;
+			bool pos_found=false;
+			for (int x=1; x<MX+1; x++) {
+				distance = sqrt((MX/2.0 -x)*(MX/2.0-x) + y*y);
+				if (!neg_found && (distance-R<0)) {
+					xlow = x; ylast=y;
+					neg_found=true; L+=Lat[0]->L[x*JX+y];
+					//cout <<"x " << x << "y " << y << endl;
+				}
+				if (neg_found && !pos_found && (distance-R)>0) {
+					xhigh=x; ylast=y;
+					pos_found=true; L+=Lat[0]->L[x*JX+y];
+					//cout <<"x " << x << "y " << y << endl;
+				}
+			}
+		}
+		for (int x=xlow+1; x<xhigh; x++) L+=Lat[0]->L[x*JX+ylast];
+		if (sign>0) cout << "Measured area is " << L << endl;
+		cout << "For segment " << name << ", 'torus potentials' set at " << count << "coordinates" << endl;
+		Boltzmann(G1,u,M);
+	} else {
+		success=false; cout <<" Probably the 'offset_first_layer' is too large so that the torus does not fit into the system.... Inital guess for torus is failing...."<<endl;
+	}
+	return success;
+}
+
 
 void Segment::SetPhiSide(){
 if (debug) cout <<"SetPhiSide in Segment " + name << endl;
@@ -184,7 +335,6 @@ if (debug) cout <<"CheckInput in Segment " + name << endl;
 		options.push_back("frozen");
 		options.push_back("tagged");
 		options.push_back("clamp");
-
 		freedom = In[0]->Get_string(GetValue("freedom"),"free");
 		if (!In[0]->InSet(options,freedom)) {
 			cout << "Freedom: '"<< freedom  <<"' for mon " + name + " not recognized. "<< endl;
@@ -197,7 +347,7 @@ if (debug) cout <<"CheckInput in Segment " + name << endl;
 					if (start==1) {success=false; cout <<"In mon " + name + " you should not combine 'freedom : free' with 'frozen_range' or 'pinned_range' or 'tagged_range' or corresponding filenames." << endl;
 				}
 			}
-		} else {
+		} else {	KEYS.push_back("fluctuation_coordinates");
 			r=(int*) malloc(6*sizeof(int)); std::fill(r,r+6,0);
 		}
 
@@ -284,7 +434,7 @@ if (debug) cout <<"CheckInput in Segment " + name << endl;
 							}
 							bx.push_back((px2[i]+px1[i]-mx)/2);
 							by.push_back((py2[i]+py1[i]-mx)/2);
-							bz.push_back((pz2[i]+pz1[i]-mx)/2);//box is equal in size in x y and z. 
+							bz.push_back((pz2[i]+pz1[i]-mx)/2);//box is equal in size in x y and z.
 						}
 					}
 				} else {
@@ -297,12 +447,12 @@ if (debug) cout <<"CheckInput in Segment " + name << endl;
 		if (freedom == "pinned") {
 			phibulk=0;
 			if (GetValue("frozen_range").size()>0 || GetValue("tagged_range").size()>0 || GetValue("frozen_filename").size()>0 || GetValue("tag_filename").size()>0) {
-			cout<< "For mon " + name + ", you should exclusively combine 'freedom : pinned' with 'pinned_range' or 'pinned_filename'" << endl;  success=false;}
+			cout<< "For mon :" + name + ", you should exclusively combine freedom : pinned with pinned_range or pinned_filename" << endl;  success=false;}
 			if (GetValue("pinned_range").size()>0 && GetValue("pinned_filename").size()>0) {
-				cout<< "For mon " + name + ", you can not combine 'pinned_range' with 'pinned_filename' " <<endl; success=false;
+				cout<< "For mon " + name + ", you can not combine pinned_range with 'pinned_filename' " <<endl; success=false;
 			}
 			if (GetValue("pinned_range").size()==0 && GetValue("pinned_filename").size()==0) {
-				cout<< "For mon " + name + ", you should provide either 'pinned_range' or 'pinned_filename' " <<endl; success=false;
+				cout<< "For mon " + name + ", you should provide either pinned_range or pinned_filename " <<endl; success=false;
 			}
 			if (GetValue("pinned_range").size()>0) { s="pinned_range";
 				n_pos=0;
@@ -456,6 +606,36 @@ if (debug) cout <<"CheckInput in Segment " + name << endl;
 		}
 		chi[i]=Chi;
 	}
+
+	if (GetValue("fluctuation_potentials").size()>0) {
+		if (GetValue("fluctuation_wavelength").size()>0) {
+				labda=In[0]->Get_int(GetValue("fluctuation_wavelength"),0);
+				if (labda<1 || labda>Lat[0]->MX || labda > Lat[0]->MY || labda > Lat[0]->MZ) {
+					success = false;cout <<"fluctuation_wavelength must be a positive number smaller or equal to the 'box' size" << endl;
+				}
+				if (!(labda ==2 || labda ==4 || labda ==8 || labda ==16 || labda ==32 || labda ==64 || labda ==128 || labda ==256 || labda ==512 ||labda ==1024)) {
+					cout <<"fluctuation wavelength should be an integer 2^x, with x = 1..10" << endl;
+				}
+		}
+		if (Lat[0]->gradients<3) {
+				success=false; cout<<"fluction_potentials only allowed when 'lat: * : gradients : 3'. "<<endl;
+			} else {
+				int MX=Lat[0]->MX;
+				int MY=Lat[0]->MY;
+				if (!(MX==2 || MX==4 || MX==8 || MX==16 ||MX==32 || MX==64 ||MX==128 || MX==256)) {success=false; cout << "Expecting n_layers_x to have a value 2^a with a = 1..8" << endl; }
+				if (!(MY==2 || MY==4 || MY==8 || MY==16 ||MY==32 || MY==64 ||MY==128 || MY==256)) {success=false; cout << "Expecting n_layers_y to have a value 2^a with a = 1..8" << endl; }
+			}
+	}
+	if (GetValue("fluctuation_amplitude").size()>0) {
+		Amplitude = In[0]->Get_Real(GetValue("fluctuation_amplitude"),1);
+		if (GetValue("fluctuation_potentials").size()==0) {
+			success = false; cout <<"fluctuation_amplitude should be combined with fluctuation_potentials and optionally with fluctuation_wavelength" << endl;
+		}
+		if (Amplitude < 0 || Amplitude > 1) {
+			success=false;  cout <<"fluctuation_amplidude sould have a value between 0 (no fluctuations) and 1 (full fluctuations). " << endl;
+		}
+	}
+	//valence=In[0]->Get_Real(GetValue("valence"),0);
 	return success;
 }
 
@@ -817,16 +997,17 @@ if (debug) cout <<"PushOutput for segment " + name << endl;
 	strings_value.clear();
 	bools.clear();
 	bools_value.clear();
-	Reals.clear();
-	Reals_value.clear();
 	ints.clear();
 	ints_value.clear();
+
 	push("freedom",freedom);
 	push("valence",valence);
 	Real theta = Lat[0]->WeightedSum(phi);
 	push("theta",theta);
 	push("theta_exc",theta-Lat[0]->Accesible_volume*phibulk);
 	push("phibulk",phibulk);
+	push("fluctuation_amplitude",Amplitude);
+	push("fluctuation_wavelength",labda);
 	if (ns>1) {
 		state_theta.clear();
 		for (int i=0; i<ns; i++){
@@ -848,6 +1029,10 @@ if (debug) cout <<"PushOutput for segment " + name << endl;
 	string profile="profile;0"; push("phi",profile);
 
 	profile="profile;1"; push("G1",profile);
+	if (Lat[0]->gradients==3) {
+		profile="profile;2"; push("phi[z]",profile);
+
+	}
 	int k=1;
 	string s;
 	string str;
@@ -883,6 +1068,23 @@ if (debug) cout <<"Get Pointer for segment " + name << endl;
 
 	if (sub[1]=="0") return phi;
 	if (sub[1]=="1") return G1;
+        if (sub[1]=="2") {
+		int MX=Lat[0]->MX;
+		int MY=Lat[0]->MY;
+		int MZ=Lat[0]->MZ;
+		int JX=Lat[0]->JX;
+		int JY=Lat[0]->JY;
+		Real Sum;
+		Zero(phi_side,M); //phi_side is reused because this array is no longer needed (hopefully....).
+		for (int z=0; z<MZ; z++) {
+			Sum=0;
+			for (int x=1; x<MX+1; x++) for (int y=1; y<MY+1; y++)
+				Sum +=phi[x*JX+y*JY+z];
+			Sum /=MX*MY;
+			phi_side[JX+JY+z]=Sum;
+		}
+		return phi_side;
+	}
 	if (ns>1) {
 		for (int i=0; i<ns; i++) {
 			stringstream ss; ss<<i+2; string str=ss.str();
@@ -897,6 +1099,7 @@ if (debug) cout <<"Get Pointer for segment " + name << endl;
 			if (sub[1]==str) return u+i*M;
 		}
 	}
+
 
 	} else {//sub[0]=="vector" ..do not forget to set SIZE before returning the pointer.
 	}

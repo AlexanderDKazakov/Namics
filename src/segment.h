@@ -68,6 +68,8 @@ public:
 	int chi_var_seg;
 	int chi_var_state;
 	Real chi_value;
+	Real Amplitude;
+	int labda;
 
 	vector<string> ints;
 	vector<string> Reals;
@@ -85,12 +87,14 @@ public:
 	Real* GetPointer(string,int&);
 	int* GetPointerInt(string,int&);
 	int GetValue(string,int&,Real&,string&);
+	bool SetExternalPotentials();
 
 
 	int* H_P;
 	int* H_MASK;
 	Real* H_u;
 	Real* H_phi;
+	Real* H_u_ext;
 
 	Real* H_phi_state;
 	Real* H_alpha;
@@ -102,6 +106,7 @@ public:
 	Real* phi_state;
 	Real* phi_side;
 	Real* u;
+	Real* u_ext;
 
 	Real* alpha;
 
@@ -123,7 +128,9 @@ public:
 	Real* GetPhi();
 	void DeAllocateMemory();
 	void AllocateMemory();
-	bool PrepareForCalculations(int*);
+	bool PrepareForCalculations(int*,bool);
+	bool PutAdsorptionGuess(Real,int*);
+	bool PutTorusPotential(int);
 	void UpdateValence(Real*,Real*,Real*,Real*,bool);
 	bool PutVarInfo(string,string,Real);
 	int PutVarScan(Real,Real,int,string);

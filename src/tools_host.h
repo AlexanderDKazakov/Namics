@@ -15,7 +15,7 @@ struct saxpy_functor
 
     saxpy_functor(double _a) : a(_a) {}
 
-      double operator()(const double& x, const double& y) const { 
+      double operator()(const double& x, const double& y) const {
             return a * x + y;
         }
 };
@@ -26,7 +26,7 @@ struct const_multiply_functor
 
     const_multiply_functor(double _a) : a(_a) {}
 
-      double operator()(const double& x, const double& y) const { 
+      double operator()(const double& x, const double& y) const {
             return a * x * y;
         }
 };
@@ -37,7 +37,7 @@ struct order_param_functor
 
     order_param_functor() {}
 
-        double operator()(const double& x, const double& y) const { 
+        double operator()(const double& x, const double& y) const {
             return pow(x-y,2);
         }
 };
@@ -76,12 +76,15 @@ typedef double Real;
 
 template <typename T>
 inline void Times(Real* P, Real* A, T* B, int M) {
-  std::transform(A, A + M, B, P, std::multiplies<Real>());
+  //std::transform(A, A + M, B, P, std::multiplies<Real>());
+	for (int i=0; i<M; ++i) P[i]=A[i]*B[i];
 }
 
 template <typename T>
 inline void Add(T* P, T* A, int M) {
-  std::transform(P, P + M, A, P, std::plus<T>());
+	for (int i=0; i<M; ++i)
+		P[i] +=A[i];
+  //std::transform(P, P + M, A, P, std::plus<Real>());
 }
 template <typename T>
 inline void Subtract(T* P, T* A, int M) {
@@ -110,7 +113,7 @@ inline void Zero(T* P, int M) {
 }
 
 template <typename T>
-inline void Cp(Real* P, T* A, int M) {
+inline void Cp(Real* P, T* A, int M) { 
   std::copy(A, A + M, P);
 }
 

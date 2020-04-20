@@ -779,14 +779,14 @@ Real *S = new Real[N];
 		V[i] = new Real[N];
 	}
 
-	
+
 	for (int i=0; i<N; i++) {
 		for (int j=0; j<N; j++) {
 			if (A[i*N + j] !=  A[i*N + j]) //If it contains NaNs
         		throw -2;
 			U[i][j] = A[i*N + j];
 		}
-    }
+  }
 
   if (N > 1) {
 		//old function svdcmp still exists, simply remove modern_ prefix to switch back. The new function uses vectors for safety.
@@ -800,8 +800,8 @@ Real *S = new Real[N];
 			S[i] = X[i]/S[i];
 			X[i]=0;
 		}
-		for (int i=0; i<N; i++) 
-			for (int j=0; j<N; j++) 
+		for (int i=0; i<N; i++)
+			for (int j=0; j<N; j++)
 				X[i] += V[i][j]*S[j];
 	} else {
 		X[0]=1;
@@ -834,7 +834,7 @@ if(debug) cout <<"DIIS in  SFNewton " << endl;
 		for (int j=0; j<k_diis; j++)
 		    Apij[j+k_diis*i] = Aij[j+m*i];
   	}
-			
+
 	Ax(Apij,Ci,k_diis);
 
 	Real normC=0;
@@ -864,7 +864,7 @@ Real SFNewton::computeresidual(Real* array, int size) {
 	//in tools:
 	residual = ComputeResidual(array, size);
 	#else //CUDA OR CPU
-	
+
 	Real* H_array;
 
 	#ifdef CUDA
@@ -921,7 +921,7 @@ int nvar=nvar_;
   Real* x0 = (Real*) malloc(nvar*sizeof(Real)); Zero(x0,nvar);
   Real* g = (Real*) malloc(nvar*sizeof(Real)); Zero(g,nvar);
   #endif
-	int it=0;
+	iterations=0;
 	int k_diis=0;
 	int k=0;
 	Cp(x0,x,nvar);
@@ -938,22 +938,22 @@ int nvar=nvar_;
 
 		if (e_info) printf("DIIS has been notified\n");
 		if (e_info) printf("Your guess = %1e \n",residual);
-		while ( residual > tolerance and it < iterationlimit) {
-			it++;
+		while ( residual > tolerance and iterations < iterationlimit) {
+			iterations++;
 			Cp(x0,x,nvar);
 			residuals(x,g);
-			k=it % m; k_diis++; //plek voor laatste opslag
+			k=iterations % m; k_diis++; //plek voor laatste opslag
 			YplusisCtimesX(x,g,-delta_max,nvar);
 			Cp(xR+k*nvar,x,nvar);
 			YisAminB(x_x0+k*nvar,x,x0,nvar);
 			DIIS(x,x_x0,xR,Aij,Apij,Ci,k,k_diis,m,nvar);
     		residual = computeresidual(g, nvar);
-			if(e_info && it%i_info == 0){
-				printf("it = %i g = %1e \n",it,residual);
+			if(e_info && iterations%i_info == 0){
+				printf("iterations = %i g = %1e \n",iterations,residual);
 			}
-		}	
-		
-		success=Message(e_info,s_info,it,iterationlimit,residual,tolerance,"");
+		}
+
+		success=Message(e_info,s_info,iterations,iterationlimit,residual,tolerance,"");
 
 	} catch (int error) {
 		if (error == -1)
@@ -993,35 +993,40 @@ if(debug) cout <<"Iterate_RF in SFNewton " << endl;
 	Real* x0 = (Real*) malloc(nvar*sizeof(Real)); Zero(x0,nvar);
 	Real* g = (Real*) malloc(nvar*sizeof(Real)); Zero(g,nvar);
   #endif
-	Real a, b, c, fa, fb, fc, res;
-	int k,it;
+	Real a=0, b=0, c=0, fa=0, fb=0, fc=0;
+	Real res=100.0;
+	int k=0,it=0;
 
-	residuals(x,g);
-	a=x[0];
-	fa=g[0];
-	x[0]=x[0]+delta_max;
-	residuals(x,g);
-	b=x[0];
-	fb=g[0];
-	if(fa==fb){success=false; cout << "WARNING: The Denominator in Regula Falsi is zero for finding the closest root."<<endl;}
-	c = a - ((fa*(a-b))/(fa-fb));
-	x[0]=c;
-	residuals(x,g);
-	fc=g[0]; res=fc;
-	k=0; it=0;
+	while ((it<iterationlimit) && (abs(res)>tolerance)) {
+		if (it>0) cout <<"restart regular falsi" << endl;
+		Real x_start=x[0];
+		residuals(x,g);
+		a=1;
+		fa=g[0];
+		x[0]=(a+delta_max)*x_start;
+		residuals(x,g);
+		b=x[0]/x_start;
+		fb=g[0];
+		if(fa==fb) cout << "WARNING: The Denominator in Regula Falsi is zero for finding the closest root."<<endl;
+		c = a - 0.5*((fa*(a-b))/(fa-fb));
+		x[0]=c*x_start;
+		residuals(x,g);
+		fc=g[0]; res=fc;
+		it=k;
+		k=0;
 
-	while((k<iterationlimit) && (abs(res)>tolerance)){
-		c = a-((fa*(a-b))/(fa-fb)); x[0]=c;residuals(x,g);fc=g[0];
-		if(fc*fb<0){
-		b=c; x[0]=b; residuals(x,g); fb=g[0]; res=fb;
-		} else {
-		a=c; x[0]=a; residuals(x,g); fa=g[0]; res=fa;
+		while((k<iterationlimit/10) && (abs(res)>tolerance)){
+			c = a-0.5*((fa*(a-b))/(fa-fb)); x[0]=c*x_start;residuals(x,g);fc=g[0];
+			if(fc*fb<0){
+				b=c; x[0]=b*x_start; residuals(x,g); fb=g[0]; res=fb;
+			} else {
+				a=c; x[0]=a*x_start; residuals(x,g); fa=g[0]; res=fa;
+			}
+			k++; it++;
+			if(fa==fb) cout << "WARNING: The Denominator in Regula Falsi is zero for finding the closest root."<<endl;
+			cout << s << it << "\t Residual: " <<	res << endl;
 		}
-		k++; it=k;
-		if(fa==fb){success=false; cout << "WARNING: The Denominator in Regula Falsi is zero for finding the closest root."<<endl;}
-	cout << s << k << "\t Residual: " <<	res << endl;
 	}
-
 
 	success=Message(e_info,s_info,it,iterationlimit,residual,tolerance,"");
   #ifdef CUDA
@@ -1162,5 +1167,3 @@ void SFNewton::Hd(Real *H_q, Real *q, Real *x, Real *x0, Real *g, Real* dg, Real
 	}*/
 	for (int i=0; i<nvar; i++) H_q[i] = (dg[i]-g[i])/delta;
 }
-
-

@@ -1,6 +1,7 @@
 #include "system.h"
 #include "tools.h"
 
+
 System::System(vector<Input *> In_, vector<Lattice *> Lat_, vector<Segment *> Seg_, vector<State *> Sta_, vector<Reaction *> Rea_, vector<Molecule *> Mol_, string name_)
 {
 	Seg = Seg_;
@@ -13,12 +14,13 @@ System::System(vector<Input *> In_, vector<Lattice *> Lat_, vector<Segment *> Se
 	prepared = false;
 	if (debug)
 		cout << "Constructor for system " << endl;
-	KEYS.push_back("calculation_type");
+  KEYS.push_back("calculation_type");
 	KEYS.push_back("constraint");
 	KEYS.push_back("delta_range");
 	KEYS.push_back("delta_inputfile");
 	KEYS.push_back("delta_molecules");
 	KEYS.push_back("phi_ratio");
+	KEYS.push_back("critical_ratio");
 	KEYS.push_back("generate_guess");
 	KEYS.push_back("initial_guess");
 	KEYS.push_back("guess_inputfile");
@@ -30,9 +32,9 @@ System::System(vector<Input *> In_, vector<Lattice *> Lat_, vector<Segment *> Se
 	for (int i=0; i<length; i++)
 	  KEYS.push_back("guess-" + In[0]->MonList[i]);
 	charged=false;
-	constraintfields=false; 
+	constraintfields=false;
   boundaryless_volume=0;
-	grad_epsilon = false; 
+	grad_epsilon = false;
 }
 System::~System()
 {
@@ -109,6 +111,7 @@ void System::AllocateMemory()
 		H_BETA = (Real *)malloc(M * sizeof(Real));
 		Lat[0]->FillMask(H_beta, px, py, pz, delta_inputfile);
 	}
+
 #ifdef CUDA
 	phitot = (Real *)AllOnDev(M);
 	alpha = (Real *)AllOnDev(M);
@@ -137,7 +140,7 @@ void System::AllocateMemory()
     q = H_q;
     eps = (Real*)malloc(M * sizeof(Real));
     EE = (Real*)malloc(M * sizeof(Real));
-     E = (Real*)malloc(M * sizeof(Real)); 
+     E = (Real*)malloc(M * sizeof(Real));
     psiMask = (int*)malloc(M * sizeof(int));
   }
   if (constraintfields) {
@@ -179,7 +182,7 @@ bool System::generate_mask()
 	}
 	if (FrozenList.size() + SysMonList.size() + SysTagList.size() + SysClampList.size() != In[0]->MonList.size())
 	{
-		cout << " There are un-used monomers in system. Remove them before starting" << endl;
+		cout << " Thera are un-used monomers in system. Remove them before starting" << endl;
 		success = false;
 	}
 
@@ -227,7 +230,7 @@ bool System::generate_mask()
 	return success;
 }
 
-bool System::PrepareForCalculations()
+bool System::PrepareForCalculations(bool first_time)
 {
 	if (debug)
 		cout << "PrepareForCalculations in System " << endl;
@@ -243,7 +246,7 @@ bool System::PrepareForCalculations()
 
 	if (constraintfields)
 	{
-		Boltzmann(BETA, BETA, M);	
+		Boltzmann(BETA, BETA, M);
 		//for(int i=0; i<M; i++) cout << "BETA at i: " << i << " is: " << BETA[i] << endl;
 		//cin.get();
 	}
@@ -254,7 +257,7 @@ bool System::PrepareForCalculations()
 
 	for (int i = 0; i < n_mon; i++)
 	{
-		success = Seg[i]->PrepareForCalculations(KSAM);
+		success = Seg[i]->PrepareForCalculations(KSAM,first_time);
 	}
 	for (int i = 0; i < n_mol; i++)
 	{
@@ -267,22 +270,41 @@ bool System::PrepareForCalculations()
 		TransferDataToDevice(H_beta, beta, M);
 	}
 #endif
+	if (first_time) {
+  	if (charged) {
+    	int length = FrozenList.size();
+    	Zero(psiMask, M);
+    	fixedPsi0 = false;
+    	for (int i = 0; i < length; ++i) {
+      	if (Seg[FrozenList[i]]->fixedPsi0) {
+        	fixedPsi0 = true;
+        	Add(psiMask, Seg[FrozenList[i]]->MASK, M);
+      	}
+    	}
+    	Real eps=Seg[0]->epsilon;
+    	for (int i=1; i<n_mon; i++) {
+					if (Seg[i]->epsilon != eps) grad_epsilon = true;
+    	}
+  	}
+  	if (initial_guess == "polymer_adsorption") {
+	  	int length=FrozenList.size();
+	  	for (int i=0; i<length; i++){
+		  	for (int j=0; j<n_mon; j++) {if (!CHI[i+n_mon*j] == 0) Seg[j]->PutAdsorptionGuess(CHI[i+n_mon*j],Seg[i]->MASK);
+		  	}
+	  	}
+  	}
+		if (initial_guess == "membrane_torus") {
+			bool found=false;
+			int segnr = Mol[solvent]->MolMonList[0];
+			for (int j=0; j<n_mon; j++) {
+					if (CHI[segnr+n_mon*j]>0.8) {
+						found=true; Seg[j]->PutTorusPotential(1);
+					} //else Seg[j]->PutTorusPotential(-1);
+			}
+			if (!found) cout <<"Unable to locate a 'solvo'phobic segment. Initial guess for membrane_torus might not work...."<< endl;
+		}
+	}
 
-  if (charged) {
-    int length = FrozenList.size();
-    Zero(psiMask, M);
-    fixedPsi0 = false;
-    for (int i = 0; i < length; ++i) {
-      if (Seg[FrozenList[i]]->fixedPsi0) {
-        fixedPsi0 = true;
-        Add(psiMask, Seg[FrozenList[i]]->MASK, M);
-      }
-    }
-    Real eps=Seg[0]->epsilon; 
-    for (int i=1; i<n_mon; i++) {
-	if (Seg[i]->epsilon != eps) grad_epsilon = true; 
-    }
-  }
   return success;
 }
 
@@ -553,15 +575,21 @@ bool System::CheckInput(int start)
 				}
 
 
-				phi_ratio=1.0;
-				if(GetValue("phi_ratio").size()>0){phi_ratio=In[0]->Get_Real(GetValue("phi_ratio"),1);}
+				phi_ratio=0.0;
+				if(GetValue("phi_ratio").size()>0) {phi_ratio=In[0]->Get_Real(GetValue("phi_ratio"),1);
+					if (phi_ratio<0) {cout <<" phi_ratio is a positive quantity" << endl; success=false;}
+				}
+				if (phi_ratio==0.0) {
+					success=false; cout <<"Please give a value for 'phi_ratio' (typically 1)" << endl;
+				}
 			}
 
 			//if (Mol[DeltaMolList[0]]->freedom=="restricted" || Mol[DeltaMolList[1]]->freedom=="restricted" ) {success =false;  cout <<"Molecule in list of delta_molecules has not freedom 'free'"<<endl; }
 		}
 
+
 		vector<string> options;
-		options.push_back("micro_emulsion");
+
 		options.push_back("micro_phasesegregation");
 		CalculationType = "";
 		if (GetValue("calculation_type").size() > 0)
@@ -666,10 +694,9 @@ bool System::CheckInput(int start)
 			options.clear();
 			options.push_back("previous_result");
 			options.push_back("file");
-			if (!In[0]->Get_string(GetValue("initial_guess"), initial_guess, options, " Info about 'initial_guess' rejected; default: 'previous_result' used."))
-			{
-				initial_guess = "previous_result";
-			}
+			options.push_back("polymer_adsorption");
+			options.push_back("membrane_torus");
+			In[0]->Get_string(GetValue("initial_guess"), initial_guess, options, " Info about 'initial_guess' rejected;");
 			if (initial_guess == "file")
 			{
 				if (GetValue("guess_inputfile").size() > 0)
@@ -680,6 +707,18 @@ bool System::CheckInput(int start)
 				{
 					success = false;
 					cout << " When 'initial_guess' is set to 'file', you need to supply 'guess_inputfile', but this entry is missing. Problem terminated " << endl;
+				}
+			}
+			if (initial_guess=="polymer_adsorption"){
+				//test here whether or not the system is ready for adsorption, e.g. solids must be defined....
+			}
+			if (initial_guess=="membrane_torus"){
+				if (Lat[0]->gradients!=2) {success = false; cout <<" Option 'membrane_torus' is only possible for two gradient coordinate system."<<endl;}
+				if (Lat[0]->geometry!="cylindrical") {success = false; cout <<" Option 'membrane_torus' is only possible for two gradient cylindrical coordinate system."<<endl;}
+				int length = Mol[solvent]->MolMonList.size();
+				if (length>1) {
+					cout <<"solvent does contain more than one segment type. Initial guess membrane_torus will not work" << endl;
+					success=false;
 				}
 			}
 		}
@@ -944,10 +983,10 @@ bool System::PutVarInfo(string Var_type_, string Var_target_, Real Var_target_va
 	if (Var_target_ == "free_energy")
 		Var_target = 0;
 	if (Var_target_ == "grand_potential")
-	{
 		Var_target = 1;
-	}
-	if (Var_target < 0 || Var_target > 1)
+	if (Var_target_ == "Laplace_pressure")
+		Var_target = 2;
+	if (Var_target < 0 || Var_target > 2 )
 	{
 		success = false;
 		cout << "Var target " + Var_target_ + " rejected in PutVarInfo in System " << endl;
@@ -970,6 +1009,9 @@ Real System::GetError()
 		break;
 	case 1:
 		Error = -1.0 * (GrandPotential - Var_target_value);
+		break;
+	case 2:
+		Error = GrandPotentialDensity[1]-Var_target_value;
 		break;
 	default:
 		cout << "Program error in GetVarError" << endl;
@@ -1060,8 +1102,12 @@ void System::PushOutput()
 	push("temperature", T);
 	push("free_energy", FreeEnergy);
 	push("grand_potential", GrandPotential);
-	if (Lat[0]->gradients == 1 && Lat[0]->geometry == "planar")
-	{
+	int n_seg=In[0]->MonList.size();
+	for (int i=0; i<n_seg; i++)
+	for (int j=0; j<n_seg; j++){
+		push("chi-"+Seg[i]->name+"-"+Seg[j]->name,CHI[i * n_seg + j]);
+	}
+	if (Lat[0]->gradients == 1 && Lat[0]->geometry == "planar") {
 		push("KJ0", -Lat[0]->Moment(GrandPotentialDensity, 1));
 		push("Kbar", Lat[0]->Moment(GrandPotentialDensity, 2));
 	}
@@ -1427,7 +1473,7 @@ void System::DoElectrostatics(Real *g, Real *x)
 bool System::ComputePhis(){
 if(debug) cout <<"ComputePhis in system" << endl;
 	int M= Lat[0]->M;
-	Real A=0, B=0; //A should contain sum_phi*charge; B should contain sum_phi 
+	Real A=0, B=0; //A should contain sum_phi*charge; B should contain sum_phi
 	bool success=true;
 	Zero(phitot,M);
 	int length=FrozenList.size();
@@ -1440,16 +1486,17 @@ if(debug) cout <<"ComputePhis in system" << endl;
 		if (constraintfields) {
 			if (i==DeltaMolList[0]) {
 				success=Mol[i]->ComputePhi(BETA,1);
-			} else { 
+			} else {
 				if (i==DeltaMolList[1]) {
-					success=Mol[i]->ComputePhi(BETA,-1); 
+					success=Mol[i]->ComputePhi(BETA,-1);
 				} else {
 					success=Mol[i]->ComputePhi(BETA,0);
 				}
 			}
 		}
-		else
+		else {
 			success = Mol[i]->ComputePhi(BETA, 0);
+		}
 	}
 
 	for (int i = 0; i < n_mol; i++)
@@ -1582,7 +1629,7 @@ if(debug) cout <<"ComputePhis in system" << endl;
 
 		if (Mol[neutralizer]->phibulk<0) {
 			cout << "WARNING: neutralizer has negative phibulk. Consider changing neutralizer...: outcome problematic...." << endl;
-cout <<"A is " << A << endl; 
+cout <<"A is " << A << endl;
 for (int j=0; j<n_mol; j++) {
 	cout << " mol : " << Mol[j]->name << " phibulk " << Mol[j]->phibulk << endl;
 
@@ -1786,7 +1833,7 @@ Real System::GetFreeEnergy(void)
 				FreeEnergy -= log(hgn[p]);
 			}
 			#else
-			for (int p=0; p<n_box; p++) 
+			for (int p=0; p<n_box; p++)
 				FreeEnergy -= log(Mol[i]->gn[p]);
 			#endif
 		}
@@ -1922,14 +1969,12 @@ Real System::GetFreeEnergy(void)
 
 Zero(TEMP,M);
 	if (charged) {
-		//Times(TEMP,EE,eps,M); 
+		//Times(TEMP,EE,eps,M);
 cout <<"Sum EE*eps = " << Lat[0]->WeightedSum(TEMP) << endl;
 		//Norm(TEMP,1.0,M);
 		AddTimes(TEMP,q,psi,M);
 		Norm(TEMP,0.5,M);
 
-cout <<"El to F = " << Lat[0]->WeightedSum(TEMP)  << endl; 
-		Add(F,TEMP,M);
 	}
 	return FreeEnergy + Lat[0]->WeightedSum(F);
 }
@@ -1971,13 +2016,14 @@ Real System::GetGrandPotential(void)
 		Norm(TEMP, 1.0 / N, M); //GP has wrong sign. will be corrected at end of this routine;
 		Add(GP, TEMP, M);
 	}
-	
+
 	Add(GP,alpha,M);
 	Real phibulkA;
 	Real phibulkB;
 	Real chi;
 	Real *phi;
 	Real *phi_side;
+	Real *u_ext;
 	int n_seg = In[0]->MonList.size();
 	int n_states = In[0]->StateList.size();
 
@@ -2023,6 +2069,14 @@ Real System::GetGrandPotential(void)
 					}
 			}
 		}
+	for (int j=0; j< n_seg; j++)
+	{
+		phi=Seg[j]->phi;
+		u_ext=Seg[j]->u_ext;
+		Times(TEMP,phi,u_ext,M);
+		Subtract(GP,TEMP,M);
+	}
+
 
 	for (int j = 0; j < n_states; j++)
 	{
@@ -2077,11 +2131,11 @@ Real System::GetGrandPotential(void)
 	Zero(TEMP,M);
 if (charged) {
 	Times(TEMP,EE,eps,M);
-//cout <<"eps EE/2 " << Lat[0]->WeightedSum(TEMP) << endl; 
+//cout <<"eps EE/2 " << Lat[0]->WeightedSum(TEMP) << endl;
 	Norm(TEMP,-2.0,M);
 
-	AddTimes(TEMP,q,psi,M);  
-	Norm(TEMP,-1.0/2.0,M); 
+	AddTimes(TEMP,q,psi,M);
+	Norm(TEMP,-1.0/2.0,M);
 
 cout <<"el to G " << Lat[0]->WeightedSum(TEMP) << endl;
 
@@ -2089,7 +2143,7 @@ cout <<"el to G " << Lat[0]->WeightedSum(TEMP) << endl;
 	Times(TEMP,q,KSAM,M); YisAminB(TEMP,q,TEMP,M); Times(TEMP,TEMP,psi,M); Norm(TEMP,0.5,M);
 	Add(GP,TEMP,M);
 }
-	
+
 	if (!charged) Times(GP,GP,KSAM,M); //necessary to make sure that there are no contribution from solid, tagged or clamped sites in GP.
 
 	return  Lat[0]->WeightedSum(GP);
@@ -2127,7 +2181,7 @@ bool System::CreateMu()
 				GN += log(hgn[p]);
 			}
 			#else
-			for (int p=0; p<n_box; p++) 
+			for (int p=0; p<n_box; p++)
 				GN += log(Mol[i]->gn[p]);
 			#endif
 			Mu = -GN / n +1;
