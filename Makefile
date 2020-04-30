@@ -1,11 +1,11 @@
 #Compiler and Linker
 ifdef GCC
-CC          :=g++-9
+CC          :=g++-7
 else
 CC			:=g++
 endif
 
-NVCC        :=/usr/local/cuda-9.0/bin/nvcc
+NVCC        :=/usr/local/cuda/bin/nvcc
 
 #The Target Binary Program
 TARGET      := namics
@@ -24,7 +24,7 @@ OBJEXT      := o
 #Flags, Libraries and Includes
 CFLAGS      := -Wall -Ofast -std=c++14 -march=native
 LIB         := -lm -lpthread
-INC         := -I/usr/local/cuda-9.0/include -I/usr/local/include -I/usr/include
+INC         := -I/usr/local/cuda/include -I/usr/local/include -I/usr/include
 #INCDEP      := -I$(INCDIR)
 ifdef CLENG_EXPERIMENTAL
 CFLAGS      := -Wall -Ofast -std=c++14 -DCLENG_EXPERIMENTAL
@@ -34,7 +34,7 @@ endif
 ifdef CUDA
 	LIB        += -L/usr/local/cuda/lib64 -lcuda -lcudart -lcurand
 	CFLAGS     += -DCUDA
-	NVCCFLAGS  := -g -ccbin gcc-5 -arch=sm_61 -std=c++14 -DCUDA
+	NVCCFLAGS  := -g -ccbin gcc-7 -arch=sm_75 -std=c++14 -DCUDA
 	ifdef PAR_MESODYN
 		CFLAGS += -DPAR_MESODYN
 		NVCCFLAGS += --expt-relaxed-constexpr --expt-extended-lambda -DPAR_MESODYN
