@@ -39,6 +39,9 @@ void help() {
     cerr << "              Use additional -l flag for showing all available test cases. [-?] for details.]" << endl;
     cerr << "-d [Enables debugging mode]" << endl;
     cerr << "-GPU [index] Sets the GPU to be used in multi-GPU systems." << endl;
+    cerr << "###" << endl;
+    cerr << "Cleng: " << CLENG_VERSION <<  endl;;
+    
 }
 
 /**
@@ -204,10 +207,8 @@ int main(int argc, char *argv[]) {
 
         EngineType TheEngine;
         TheEngine = SCF;
-        if (!config.In[0]->MesodynList.empty()) { TheEngine = MESODYN;
-        }
-		if (!config.In[0]->ClengList.empty()) { TheEngine = CLENG;
-        }
+        if (!config.In[0]->MesodynList.empty()) { TheEngine = MESODYN; }
+		if (!config.In[0]->ClengList.empty()) { TheEngine = CLENG; }
 		if (!config.In[0]->TengList.empty()) { TheEngine = TENG; }
 
         int n_out = 0;

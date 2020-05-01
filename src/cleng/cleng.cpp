@@ -79,14 +79,14 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         // MCS
         if (!GetValue("MCS").empty()) {
             success = In[0]->Get_int(GetValue("MCS"), MCS, 1, 10000000, "The number of Monte Carlo steps should be between 1 and 10000000");
-            if (!success) { cout << "MCS will be equal to 5" << endl; MCS = 1; }
+            if (!success) { MCS = 1; cout << "MCS will be equal to " << MCS << endl; }
         } else MCS = 5;
         if (debug) cout << "MCS is " << MCS << endl;
 
         // seed
         if (!GetValue("seed").empty()) {
             success = In[0]->Get_int(GetValue("seed"), pseed, 1, 1000, "The seed should be between 1 and 1000");
-            if (!success) { cout << "The seed will be equal 1" << endl; pseed = 1; }
+            if (!success) { pseed = 1; cout << "The seed will be equal to " << pseed << endl; }
         } else pseed = 0;
         rand = pseed==0 ? Random() : Random(pseed);
         if (debug) cout << "seed is " << pseed << endl;
@@ -94,7 +94,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         // delta_step
         if (!GetValue("delta_step").empty()) {
             success = In[0]->Get_int(GetValue("delta_step"), delta_step, 1, 5, "The number of delta_step should be between 1 and 5");
-            if (!success) { cout << "The delta_step will be equal 1" << endl; delta_step = 1;}
+            if (!success) { delta_step = 1; cout << "The delta_step will be equal to" << delta_step << endl; }
         } else delta_step = 0;
         if (debug) cout << "delta_step is " << delta_step << endl;
 
@@ -111,7 +111,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
                 success = In[0]->Get_int(GetValue("pivot_axis"), pivot_axis, 1, 3,
                                          "The axis of pivot_move should be between 1 and 3");
                 if (!success) {
-                    cout << "The pivot_axis will be all axis." << endl;
+                    cout << "The pivot_axis will be:  all axis." << endl;
                     pivot_axis = -1;
                 }
             } else pivot_axis = -1;
@@ -296,7 +296,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         In[0]->split(In[0]->name, '.', sub);
         filename = In[0]->output_info.getOutputPath() + sub[0];
 
-        cout << cmajor_version << "." << cminor_version << "." << cpatch << " v." << cversion << endl;
+        cout << CLENG_VERSION << endl;;
         begin_simulation = std::chrono::steady_clock::now();
         success = MonteCarlo(save_vector);
     }
