@@ -502,7 +502,7 @@ Real Cleng::GetN_times_mu() {
         for (auto && line : out_per_line) {
             vtk.clear();
             vtk = prepare_vtk(line[0], line[1], line[2]);
-            cleng_writer.write("/VTK_data", "vtk_"line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
+            cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
         }
 
         // free energy calculation

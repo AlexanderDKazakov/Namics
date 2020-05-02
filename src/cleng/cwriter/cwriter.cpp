@@ -1,6 +1,14 @@
-#ifdef CLENG_EXPERIMENTAL  // experimental
-
+// #ifdef CLENG_EXPERIMENTAL  // experimental
 #include "cwriter.h"
+
+void CWriter::init(const string &filename) {
+
+    string FREE_FILE_NAME = getFreeFileName(filename);
+    // Create a new file using the default property lists.
+
+    file = make_shared<H5File>(H5File(FREE_FILE_NAME, H5F_ACC_TRUNC));
+    Exception::dontPrint();
+}
 
 string CWriter::getFreeFileName(const string &filename) {
     string FreeFileName = filename;
@@ -17,15 +25,6 @@ string CWriter::getFreeFileName(const string &filename) {
         }
     }
     return FreeFileName + ".h5";
-}
-
-CWriter::CWriter(const string &filename) {
-
-    string FREE_FILE_NAME = getFreeFileName(filename);
-    // Create a new file using the default property lists.
-
-    file = make_shared<H5File>(H5File(FREE_FILE_NAME, H5F_ACC_TRUNC));
-    Exception::dontPrint();
 }
 
 bool CWriter::append(const string &group_name, const string &dataset_name, vector<int> &dims, vector<Real> data) {
@@ -103,4 +102,4 @@ bool CWriter::write(const string &group_name, const string &dataset_name, vector
     return success;
 }
 
-#endif
+// #endif
