@@ -165,10 +165,11 @@ void Cleng::make_BC() {
     };
 }
 
-vector<Real> Cleng::prepare_vtk() {
+vector<Real> Cleng::prepare_vtk(string key, string name, string prop) {
     int Size = 0;
     vector<Real> vtk;
-    Real *X = Out[0]->GetPointer(Out[0]->OUT_key[0], Out[0]->OUT_name[0], Out[0]->OUT_prop[0], Size);
+    vtk.clear();
+    Real *X = Out[0]->GetPointer(key, name, prop, Size);
     for (int i = 1; i < box.x + 1; i++) {
         for (int j = 1; j < box.y + 1; j++) {
             for (int k = 1; k < box.z + 1; k++) {
@@ -494,3 +495,19 @@ Real Cleng::GetN_times_mu() {
     }
     return n_times_mu;
 }
+
+#ifdef CLENG_EXPERIMENTAL
+    void Cleng::save2h5() {
+        // vtk profiles per line of h5
+        for (auto && line : out_per_line) {
+            vtk.clear();
+            vtk = prepare_vtk(line[0], line[1], line[2]);
+            cleng_writer.write("/VTK_data", "vtk_"line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
+        }
+
+        // free energy calculation
+        n_times_mu = GetN_times_mu();
+        vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
+        cleng_writer.append("/Free_energy", "free_energy", dims_3, MC_free_energy);
+    }
+#endif

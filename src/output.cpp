@@ -229,9 +229,9 @@ if (debug) cout << "GetPointer in output " << endl;
 	int listlength;
 	int choice;
 	int i,j;
-	if  (key=="sys") choice=1;
-	if  (key=="mol") choice=2;
-	if  (key=="mon") choice=3;
+	if (key=="sys") choice=1;
+	if (key=="mol") choice=2;
+	if (key=="mon") choice=3;
 	if (key=="lat") choice=4;
 	if (key=="output") choice = 5;
 
