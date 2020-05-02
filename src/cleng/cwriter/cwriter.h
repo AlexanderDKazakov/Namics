@@ -26,7 +26,9 @@ public:
     shared_ptr<DataSpace> filespace;
     shared_ptr<DataSpace> memspace;
 
-    explicit CWriter(const string &filename);
+    // explicit CWriter();
+
+    void init(const string &filename);
 
     bool write(const string &group_name, const string &dataset_name, vector<int> &dims, vector<Real> data);
 

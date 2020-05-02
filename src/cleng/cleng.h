@@ -32,8 +32,8 @@
 
 static const string CLENG_MAJOR_VERSION = "1";
 static const string CLENG_MINOR_VERSION = "4";
-static const string CLENG_PATCH = "1";
-static const string CLENG_INTERNAL_VERSION = "129";
+static const string CLENG_PATCH = "2";
+static const string CLENG_INTERNAL_VERSION = "135";
 static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ")";
 
 class Cleng {
@@ -53,6 +53,10 @@ private:
     string internal_name = "[Cleng] ";
     string metropolis_name = "[Metropolis] ";
     string analysis_name = "[Analysis] ";
+
+    #ifdef CLENG_EXPERIMENTAL
+    CWriter cleng_writer;
+    #endif
 
     void fillXYZ();
 

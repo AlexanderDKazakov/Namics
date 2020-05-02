@@ -611,7 +611,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
 
     signal(SIGINT, signalHandler);
 #ifdef CLENG_EXPERIMENTAL
-    CWriter cleng_writer(filename);
+    cleng_writer.init(filename);
 #endif
     Checkpoint checkpoint;
     if (checkpoint_load) {
