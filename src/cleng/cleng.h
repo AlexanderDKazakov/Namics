@@ -98,6 +98,8 @@ public:
     map<int, Point> nodeIDs_clampedMove;
     map<int, vector<int>> pivot_arm_nodes;
 
+    vector<vector<string>> out_per_line;
+
 // TODO: expand to template
     Matrix<int> rotation_matrix;
     Matrix<Real> scaling_matrix;
@@ -207,13 +209,18 @@ public:
     template<class T>
     Matrix<T> _create_scaling_matrix(Real scaling_coef);
 
-    vector<Real> prepare_vtk();
+    vector<Real> prepare_vtk(string, string, string);
 
     bool CheckInput(int start, bool save_vector);
 
     string GetValue(const string&);
 
     Real GetN_times_mu();
+
+    // #ifdef CLENG_EXPERIMENTAL
+    vector<Real> vtk;
+    void save2h5();
+    // #endif
 };
 
 #endif

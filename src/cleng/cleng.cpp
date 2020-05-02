@@ -44,6 +44,7 @@ Cleng::Cleng(
     KEYS.emplace_back("pivot_axis");
     KEYS.emplace_back("pivot+one_node");
     KEYS.emplace_back("pivot+one_bond");
+    KEYS.emplace_back("h5");
 
     // Debug.log
     //out.open("debug.out", ios_base::out);
@@ -268,6 +269,41 @@ bool Cleng::CheckInput(int start, bool save_vector) {
             if (!success) {return success;}
         } else prefactor_kT = 1;
         if (debug) cout << "prefactor_kT is " << prefactor_kT << endl;
+
+        // h5
+
+        vector<string> key_name_props;
+
+        string values2h5;
+        if (!GetValue("h5").empty()) {
+            success = In[0]->Get_string(GetValue("h5"), values2h5, "");
+            // cutting {first, last}
+            values2h5.erase(0, 1);
+            values2h5.erase(values2h5.length()-1, values2h5.length());
+
+            // parsing through ,
+            string value;
+            stringstream stream(values2h5);
+            while( getline(stream, value, ',') ) {
+                key_name_props.push_back(value);
+            }
+            // parsing through |
+            string knp;
+            for (auto && one_output : key_name_props) {
+                vector<string> _;
+                stringstream stream(one_output);
+                while( getline(stream, knp, '|') ) {
+                    _.push_back(knp);
+                }
+                out_per_line.push_back(_);
+            }
+        }
+        else values2h5 = "";
+        if (debug) cout << "values2h5 is " << values2h5 << endl;
+
+        for (auto && f : out_per_line) {
+            if (debug) cout << "h5_out: " << f[0] << " " << f[1] << " " << f[2] << endl;
+        }
 
         // TODO: EXTEND CLENG
         if (success) {
@@ -627,12 +663,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
     if (cleng_pos) WriteClampedNodePosition();
 
 #ifdef CLENG_EXPERIMENTAL
-    vector<Real>vtk = prepare_vtk();
-    cleng_writer.write("/VTK_data", "vtk"+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
-
-    n_times_mu = GetN_times_mu();
-    vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
-    cleng_writer.append("/Free_energy", "free_energy", dims_3, MC_free_energy);
+    save2h5();
 #endif
 
     cout << "Initialization done.\n" << endl;
@@ -757,11 +788,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
             cout << internal_name << analysis_name << "Cleng_rejected: # " << cleng_rejected << endl;
         }
 #ifdef CLENG_EXPERIMENTAL
-        vtk = prepare_vtk();
-        cleng_writer.write("/VTK_data", "vtk" + to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
-
-        MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
-        cleng_writer.append("/Free_energy", "free_energy", dims_3, MC_free_energy);
+        save2h5();
 #endif
         if (((MC_attempt + MCS_checkpoint) % delta_save) == 0) WriteOutput();
         if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
