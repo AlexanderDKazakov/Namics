@@ -170,13 +170,15 @@ vector<Real> Cleng::prepare_vtk(string key, string name, string prop) {
     vector<Real> vtk;
     vtk.clear();
     Real *X = Out[0]->GetPointer(key, name, prop, Size);
-    for (int i = 1; i < box.x + 1; i++) {
-        for (int j = 1; j < box.y + 1; j++) {
-            for (int k = 1; k < box.z + 1; k++) {
-                vtk.push_back(X[i * J.x + j * J.y + k]);
-            }
-        }
+    if (X != nullptr) {
+        for (int i = 1; i < box.x + 1; i++) 
+        for (int j = 1; j < box.y + 1; j++) 
+        for (int k = 1; k < box.z + 1; k++) 
+        vtk.push_back(X[i * J.x + j * J.y + k]);
+    } else {
+        vtk.push_back(0.0);
     }
+    
     return vtk;
 }
 
@@ -502,7 +504,8 @@ Real Cleng::GetN_times_mu() {
         for (auto && line : out_per_line) {
             vtk.clear();
             vtk = prepare_vtk(line[0], line[1], line[2]);
-            cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
+            if (vtk.size() == dims_vtk.size()) cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
+            else cout << "vtk file was not generated because 'profile' was not found for " << line[0] << "|" << line[1] << "|" << line[2] << endl;
         }
 
         // free energy calculation
