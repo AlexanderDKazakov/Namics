@@ -787,13 +787,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
             cout << internal_name << analysis_name << "Rejected: # " << rejected << " | " << 100 * (rejected / MC_attempt) << "%" << endl;
             cout << internal_name << analysis_name << "Cleng_rejected: # " << cleng_rejected << endl;
         }
-#ifdef CLENG_EXPERIMENTAL
-        save2h5();
-#endif
+        
+        cout << internal_name << "Saving... " << MC_attempt + MCS_checkpoint << endl;
         if (((MC_attempt + MCS_checkpoint) % delta_save) == 0) WriteOutput();
         if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
         if (cleng_dis) WriteClampedNodeDistance();
         if (cleng_pos) WriteClampedNodePosition();
+#ifdef CLENG_EXPERIMENTAL
+        save2h5();
+#endif
         if (cleng_flag_termination) break;
 
         cout << endl;

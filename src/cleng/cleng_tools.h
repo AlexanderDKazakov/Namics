@@ -371,7 +371,6 @@ int Cleng::getLastMCS() {
 
 void Cleng::WriteOutput() {
     if (debug) cout << "WriteOutput in Cleng" << endl;
-    cout << "[Cleng] Saving... " << MC_attempt + MCS_checkpoint << endl;
     PushOutput();
     New[0]->PushOutput();
     for (int i = 0; i < n_out; i++) Out[i]->WriteOutput(MC_attempt + MCS_checkpoint);
@@ -504,8 +503,8 @@ Real Cleng::GetN_times_mu() {
         for (auto && line : out_per_line) {
             vtk.clear();
             vtk = prepare_vtk(line[0], line[1], line[2]);
-            if (vtk.size() == dims_vtk.size()) cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
-            else cout << "vtk file was not generated because 'profile' was not found for " << line[0] << "|" << line[1] << "|" << line[2] << endl;
+            if (vtk.size() == (unsigned int)dims_vtk[0]) cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
+            else cout << "vtk file was not saved because 'profile' was not found for " << line[0] << "|" << line[1] << "|" << line[2] << endl;
         }
 
         // free energy calculation
