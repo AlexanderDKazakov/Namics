@@ -1,4 +1,4 @@
-// #ifdef CLENG_EXPERIMENTAL  // experimental
+#ifdef CLENG_EXPERIMENTAL  // experimental
 #include "cwriter.h"
 
 void CWriter::init(const string &filename) {
@@ -102,4 +102,4 @@ bool CWriter::write(const string &group_name, const string &dataset_name, vector
     return success;
 }
 
-// #endif
+#endif
