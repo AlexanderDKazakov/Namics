@@ -32,8 +32,8 @@
 
 static const string CLENG_MAJOR_VERSION = "1";
 static const string CLENG_MINOR_VERSION = "4";
-static const string CLENG_PATCH = "2";
-static const string CLENG_INTERNAL_VERSION = "137";
+static const string CLENG_PATCH = "3";
+static const string CLENG_INTERNAL_VERSION = "153";
 static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ")";
 
 class Cleng {
@@ -181,13 +181,13 @@ public:
 
     bool InRange(int id_node_for_move);
 
-    void PushOutput();
+    void PushOutput(int num);
 
-    void WriteOutput();
+    void WriteOutput(int num);
 
-    void WriteClampedNodeDistance();
+    void WriteClampedNodeDistance(int num);
 
-    void WriteClampedNodePosition();
+    void WriteClampedNodePosition(int num);
 
     void make_BC();
 
@@ -221,10 +221,10 @@ public:
 
     Real GetN_times_mu();
 
-    // #ifdef CLENG_EXPERIMENTAL
+#ifdef CLENG_EXPERIMENTAL
     vector<Real> vtk;
     void save2h5();
-    // #endif
+#endif
 };
 
 #endif

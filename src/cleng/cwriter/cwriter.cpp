@@ -89,7 +89,7 @@ bool CWriter::write(const string &group_name, const string &dataset_name, vector
     try { Group group = file->openGroup(group_name); }
     catch (...) {
         Group group = file->createGroup(group_name);
-        cerr << "Created: " << group_name << " group\n ";
+        cerr << "Created: " << group_name << " group\n";
     }
     Group group = file->openGroup(group_name); // for debugging
 

@@ -41,6 +41,7 @@ bool SimpleNode::inSubBoxRange(const Point &subBoxRange) const {
 
 //    cout << "[Simple Node]Dist: " << dist << endl;
 //    cout << "[Simple Node]distance: " << distance.to_string() << endl;
+//    cout << "[Simple Node]subBoxRange: " << subBoxRange.to_string() << endl;
 
 // TODO: implement operator=>
     if (distance > subBoxRange) {
@@ -50,8 +51,9 @@ bool SimpleNode::inSubBoxRange(const Point &subBoxRange) const {
              << " and " << cnode->system_point.to_string() << endl;
         return false;
     }
+// It is essential condition.
     if (distance == subBoxRange) {
-        cout << "Nodes are too far away from each other: " << this->id << " and " << cnode->id << endl;
+        cout << "[EQUAL] Nodes are too far away from each other: " << this->id << " and " << cnode->id << endl;
         cout << "(int) Distance: " << std::to_string((int) dist) << " between of " << system_point.to_string()
              << " and " << cnode->system_point.to_string() << endl;
         return false;

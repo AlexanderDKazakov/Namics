@@ -1,3 +1,9 @@
+#include <utility>
+
+#include <utility>
+
+#include <utility>
+
 #include "cleng.h"
 #include "iterator/EnumerateIterator.h"
 
@@ -93,7 +99,7 @@ bool Cleng::IsCommensuratable() {
     // TODO: Need to take only Polymer molecules...
     for (int i = 0; i < length; i++) {
         int chain_length = Mol[i]->chainlength;
-        if (chain_length < 10) continue;
+        if (chain_length < 10) continue;   // hack
 
         for (auto &&SN : Enumerate(simpleNodeList)) {
             auto p3 = SN.second->get_cnode()->get_system_point() - SN.second->get_system_point();
@@ -102,8 +108,9 @@ bool Cleng::IsCommensuratable() {
             int path_length_even = path_length % 2;
             int chain_length_even = chain_length % 2;
 
-//            cout << "path_length:  "  << path_length << endl;
-//            cout << "chain_length: " << chain_length << endl;
+//            cout << "path_length:  "  << path_length
+//            << " | chain_length: " << chain_length << endl;
+
 //            if (path_length > 20) cout << "Ooowww!! path_len > 20! "<< endl;
 //            if (chain_length > 20) cout << "Ooowww!! chain_len > 20! "<< endl;
 
@@ -169,7 +176,7 @@ vector<Real> Cleng::prepare_vtk(string key, string name, string prop) {
     int Size = 0;
     vector<Real> vtk;
     vtk.clear();
-    Real *X = Out[0]->GetPointer(key, name, prop, Size);
+    Real *X = Out[0]->GetPointer(std::move(key), std::move(name), std::move(prop), Size);
     if (X != nullptr) {
         for (int i = 1; i < box.x + 1; i++) 
         for (int j = 1; j < box.y + 1; j++) 
@@ -369,14 +376,14 @@ int Cleng::getLastMCS() {
     return MC_attemp;
 }
 
-void Cleng::WriteOutput() {
+void Cleng::WriteOutput(int num) {
     if (debug) cout << "WriteOutput in Cleng" << endl;
-    PushOutput();
+    PushOutput(num);
     New[0]->PushOutput();
-    for (int i = 0; i < n_out; i++) Out[i]->WriteOutput(MC_attempt + MCS_checkpoint);
+    for (int i = 0; i < n_out; i++) Out[i]->WriteOutput(num);
 }
 
-void Cleng::PushOutput() {
+void Cleng::PushOutput(int num) {
 
     for (int i = 0; i < n_out; i++) {
         Out[i]->PointerVectorInt.clear();
@@ -393,7 +400,7 @@ void Cleng::PushOutput() {
         Out[i]->ints_value.clear();
 
         if (Out[i]->name == "ana" || Out[i]->name == "kal") {
-            Out[i]->push("MC_attempt", MC_attempt + MCS_checkpoint);
+            Out[i]->push("MC_attempt", num);
             Out[i]->push("MCS", MCS);
             Out[i]->push("free_energy", free_energy_current);
         }
@@ -448,7 +455,7 @@ void Cleng::fillXYZ() {
     }
 }
 
-void Cleng::WriteClampedNodeDistance() {
+void Cleng::WriteClampedNodeDistance(int num) {
     vector<Real> distPerMC;
     int i = 0;
     for (auto &&SN :  simpleNodeList) {
@@ -458,19 +465,19 @@ void Cleng::WriteClampedNodeDistance() {
 
     ofstream outfile;
     outfile.open(filename + ".cdis", std::ios_base::app);
-    outfile << MC_attempt + MCS_checkpoint << " ";
+    outfile << num << " ";
     for (auto n : distPerMC)outfile << n << " ";
     outfile << endl;
 }
 
-void Cleng::WriteClampedNodePosition() {
+void Cleng::WriteClampedNodePosition(int num) {
 
     ofstream outfile;
     outfile.open(filename + ".cpos", std::ios_base::app);
 
 //    cout
     outfile
-            << "#step " << MC_attempt + MCS_checkpoint << " {X, Y, Z} #" << endl;
+            << "#step " << num << " {X, Y, Z} #" << endl;
 
     int i = 0;
     for (auto &&SN :  simpleNodeList) {

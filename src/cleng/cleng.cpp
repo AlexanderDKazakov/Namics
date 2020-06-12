@@ -79,9 +79,9 @@ bool Cleng::CheckInput(int start, bool save_vector) {
 
         // MCS
         if (!GetValue("MCS").empty()) {
-            success = In[0]->Get_int(GetValue("MCS"), MCS, 1, 10000000, "The number of Monte Carlo steps should be between 1 and 10000000");
+            success = In[0]->Get_int(GetValue("MCS"), MCS, 0, 10000000, "The number of Monte Carlo steps should be between 0 and 10_000_000; MCS = 0 is special case for calculating using only SCF part and Cleng tools.");
             if (!success) { MCS = 1; cout << "MCS will be equal to " << MCS << endl; }
-        } else MCS = 5;
+        } else MCS = 0;
         if (debug) cout << "MCS is " << MCS << endl;
 
         // seed
@@ -95,7 +95,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         // delta_step
         if (!GetValue("delta_step").empty()) {
             success = In[0]->Get_int(GetValue("delta_step"), delta_step, 1, 5, "The number of delta_step should be between 1 and 5");
-            if (!success) { delta_step = 1; cout << "The delta_step will be equal to" << delta_step << endl; }
+            if (!success) { delta_step = 1; cout << "The delta_step will be equal to " << delta_step << endl; }
         } else delta_step = 0;
         if (debug) cout << "delta_step is " << delta_step << endl;
 
@@ -153,7 +153,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
 
         // delta_save
         if (!GetValue("delta_save").empty()) {
-            success = In[0]->Get_int(GetValue("delta_save"), delta_save, 1, MCS, "The delta_save interval should be between 1 and " + to_string(MCS));
+            success = In[0]->Get_int(GetValue("delta_save"), delta_save, 1, MCS+1, "The delta_save interval should be between 1 and " + to_string(MCS+1));
         } else delta_save = 1;
         if (debug) cout << "delta_save_interval " << delta_save << endl;
 
@@ -332,8 +332,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         In[0]->split(In[0]->name, '.', sub);
         filename = In[0]->output_info.getOutputPath() + sub[0];
 
-        cout << CLENG_VERSION << endl;;
-        begin_simulation = std::chrono::steady_clock::now();
+        cout << CLENG_VERSION << endl;
         success = MonteCarlo(save_vector);
     }
     return success;
@@ -367,7 +366,8 @@ bool Cleng::CP(transfer tofrom) {
                 second_node->set_cnode(first_node);
                 //
                 simpleNodeList.push_back(first_node);
-                simpleNodeList.push_back(second_node);}
+                simpleNodeList.push_back(second_node);
+            }
             nodes_map = createNodes(simpleNodeList, pivot_arm_nodes, pivot_arms);
             break;
 
@@ -458,7 +458,6 @@ bool Cleng::MakeChecks(int id_node_for_move) {
     while (!Checks(id_node_for_move)) {
         cout << internal_name << "Prepared MC step for the node ["<< id_node_for_move << "] does not pass checks. Rejected." << endl;
         MakeMove(true);
-        rejected++;
         cleng_rejected++;
         success = false;
         return success; // TODO: CHECK THIS RETURN
@@ -500,7 +499,7 @@ Point Cleng::preparePivotClampedMove(int id_node_for_move) {
     // moving center of rotation to the center
     for (auto &&node : nodes_map) node.second.data()->get()->shift(center_of_rotation.negate());
     Point current_Point = nodes_map[id_node_for_move].data()->get()->_returnSystemPoint();
-    Point point_shifted_by_matrix = rotation_matrix.dot(current_Point);;
+    Point point_shifted_by_matrix = rotation_matrix.dot(current_Point);
     Point clamped_move = point_shifted_by_matrix - current_Point;
     // center +1
     if (clamped_move.x < -(box.x / 2) +1) clamped_move.x += box.x;
@@ -521,10 +520,12 @@ bool Cleng::MakeMove(bool back) {
 
     if (back) {
         cout << internal_name << "Moving back...";
+        string _nodes;
         for (auto &&nodeID_clampedMove : nodeIDs_clampedMove) {
+            _nodes +=  " " + to_string(nodeID_clampedMove.first);
             _moveClampedNode(back, nodeID_clampedMove.first, nodeID_clampedMove.second);
         }
-        cout << "[Moved back]" << endl;
+        cout << _nodes << " [Moved back]" << endl;
     } else {
         nodeIDs_clampedMove.clear();
         if (pivot_move) {
@@ -594,6 +595,7 @@ bool Cleng::_oneNodeMoveClampedNode(const bool &back) {
     id_node_for_move = prepareIdNode();
     clamped_move = prepareMove("one_node_move");
     _moveClampedNode(back, id_node_for_move, clamped_move);
+    nodeIDs_clampedMove[id_node_for_move] = clamped_move;
 
     cout << internal_name << "checking positions...";
     success = MakeChecks(id_node_for_move);
@@ -608,6 +610,7 @@ bool Cleng::_oneNodeMoveClampedNode(const bool &back) {
 bool Cleng::MonteCarlo(bool save_vector) {
     if (debug) cout << "Monte Carlo in Cleng" << endl;
     bool success = true;
+    begin_simulation = std::chrono::steady_clock::now();
 
     signal(SIGINT, signalHandler);
 #ifdef CLENG_EXPERIMENTAL
@@ -636,7 +639,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
     accepted = 0.0;
     rejected = 0.0;
     cleng_rejected = 0.0;
-    MC_attempt = 0;
+    MC_attempt = 0; // initial value for loop and cleng_writer
     make_BC();
 
 
@@ -658,155 +661,160 @@ bool Cleng::MonteCarlo(bool save_vector) {
     if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
 
 // init save
-    WriteOutput();
-    if (cleng_dis) WriteClampedNodeDistance();
-    if (cleng_pos) WriteClampedNodePosition();
+    WriteOutput(MC_attempt + MCS_checkpoint);
+    if (cleng_dis) WriteClampedNodeDistance(MC_attempt + MCS_checkpoint);
+    if (cleng_pos) WriteClampedNodePosition(MC_attempt + MCS_checkpoint);
 
 #ifdef CLENG_EXPERIMENTAL
     save2h5();
 #endif
 
     cout << "Initialization done.\n" << endl;
-    update_ids_node4move();
-    cout << internal_name << "System: " << endl;
-    for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
-    cout << endl;
-    if (pivot_move) {
-        cout << internal_name << "System [pivot -> stars only]: " << endl;
-        for (auto &&pair_pivot : pivot_arm_nodes) {
-            cout << "---> arm: " << pair_pivot.first << " ids: ";
-            for (auto &&ids: pair_pivot.second) cout << ids << " ";
-            cout << endl;
-        }
-        cout << endl;
-    }
-    cout << internal_name <<  "Here we go..." << endl;
-    bool success_;
-    for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
-        success_ = MakeMove(false);
-        if (success_) {
-            CP(to_segment);
 
-            cout << endl;
-            cout << internal_name << "System for calculation: " << endl;
-            for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
-            cout << endl;
-            if (pivot_move) {
-                cout << internal_name << "System [pivot -> stars only]: " << endl;
-                for (auto &&pair_pivot : pivot_arm_nodes) {
-                    cout << "---> arm: " << pair_pivot.first << " ids: ";
-                    for (auto &&ids: pair_pivot.second) cout << ids << " ";
-                    cout << endl;
-                }
+    if (MCS) {
+
+        update_ids_node4move();
+        cout << internal_name << "System: " << endl;
+        for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
+        cout << endl;
+        if (pivot_move) {
+            cout << internal_name << "System [pivot -> stars only]: " << endl;
+            for (auto &&pair_pivot : pivot_arm_nodes) {
+                cout << "---> arm: " << pair_pivot.first << " ids: ";
+                for (auto &&ids: pair_pivot.second) cout << ids << " ";
                 cout << endl;
             }
-
-            success_iteration = New[0]->Solve(true);
-            //// Simulation without rescue procedure ---> TODO: [1nd solution]
-            if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
-                cout << "%?% Sorry, Free Energy is NaN. " << endl;
-                cout << "%?% Here is result from solver: " << success_iteration << endl;
-
-                cout << "%?% The step will be rejected! "
-                        "Probably your system is too dense! "
-                        "Simulation will continue... " << endl;
-                cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
-                MakeMove(true);
-                rejected++;
-                cleng_rejected++;
-                continue;
-            } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
-            //// Simulation without rescue procedure <---
-
-            //// Simulation with rescue procedure --->
-//            if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
-//                cout << "%?% Sorry, Free Energy is NaN.  " << endl;
-//                cout << "%?% Here is result from solver: " << success_iteration << endl;
-////                New[0]->rescue_status = NONE;  # TODO need to rescue?
-//                New[0]->attempt_DIIS_rescue();
-//                cout << "%?% Restarting iteration." << endl;
-//                success_iteration = New[0]->Solve(true);
-//
-//                if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
-//                    cout << "%?% Sorry, Free Energy is still NaN. " << endl;
-//                    cout << "%?% Here is result from solver: " << success_iteration << endl;
-//
-//                    cout << "%?% The step will be rejected! "
-//                            "Probably your system is too dense! "
-//                            "Simulation will continue... " << endl;
-//                    cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
-//                    MakeMove(true);
-//                    rejected++;
-//                    cleng_rejected++;
-//                    continue;
-//                }
-//            } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
-
-            //// Simulation with rescue procedure <---
-            if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
-
-            cout << "Free Energy (c): " << free_energy_current << endl;
-            cout << "            (t): " << free_energy_trial   << endl;
-            cout << "   prefactor kT: " << prefactor_kT        << endl;
             cout << endl;
+        }
+        cout << internal_name <<  "Here we go..." << endl;
+        bool success_move;
+        for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
+            success_move = MakeMove(false);
+            if (success_move) {
+                CP(to_segment);
 
-            if (!metropolis) {
-                cout << "Metropolis is disabled. " << endl;
-                free_energy_current = free_energy_trial;
-                accepted++;
-            } else {
-                if (free_energy_trial - free_energy_current <= 0.0) {
-                    cout << internal_name << metropolis_name << "Accepted" << endl;
-                    n_times_mu = GetN_times_mu();
+                cout << endl;
+                cout << internal_name << "System for calculation: " << endl;
+                for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
+                cout << endl;
+                if (pivot_move) {
+                    cout << internal_name << "System [pivot -> stars only]: " << endl;
+                    for (auto &&pair_pivot : pivot_arm_nodes) {
+                        cout << "---> arm: " << pair_pivot.first << " ids: ";
+                        for (auto &&ids: pair_pivot.second) cout << ids << " ";
+                        cout << endl;
+                    }
+                    cout << endl;
+                }
+
+                success_iteration = New[0]->Solve(true);
+                //// Simulation without rescue procedure ---> TODO: [1nd solution]
+                if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+                    cout << "%?% Sorry, Free Energy is NaN. " << endl;
+                    cout << "%?% Here is result from solver: " << success_iteration << endl;
+
+                    cout << "%?% The step will be rejected! "
+                            "Probably your system is too dense! "
+                            "Simulation will continue... " << endl;
+                    cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
+                    MakeMove(true);
+                    cleng_rejected++;
+                    continue;
+                } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+                //// Simulation without rescue procedure <---
+
+                //// Simulation with rescue procedure --->
+//                if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+//                    cout << "%?% Sorry, Free Energy is NaN.  " << endl;
+//                    cout << "%?% Here is result from solver: " << success_iteration << endl;
+////                    New[0]->rescue_status = NONE;  # TODO need to rescue?
+//                    New[0]->attempt_DIIS_rescue();
+//                    cout << "%?% Restarting iteration." << endl;
+//                    success_iteration = New[0]->Solve(true);
+//
+//                    if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+//                        cout << "%?% Sorry, Free Energy is still NaN. " << endl;
+//                        cout << "%?% Here is result from solver: " << success_iteration << endl;
+//
+//                        cout << "%?% The step will be rejected! "
+//                                "Probably your system is too dense! "
+//                                "Simulation will continue... " << endl;
+//                        cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
+//                        MakeMove(true);
+//                        cleng_rejected++;
+//                        continue;
+//                    }
+//                } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+
+                //// Simulation with rescue procedure <---
+                if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
+
+                cout << "Free Energy (c): " << free_energy_current << endl;
+                cout << "            (t): " << free_energy_trial   << endl;
+                cout << "   prefactor kT: " << prefactor_kT        << endl;
+                cout << endl;
+
+                if (!metropolis) {
+                    cout << "Metropolis is disabled. " << endl;
                     free_energy_current = free_energy_trial;
                     accepted++;
                 } else {
-                    Real acceptance = rand.getReal(0, 1);
-
-                    if (acceptance < exp((-1.0/prefactor_kT) * (free_energy_trial - free_energy_current))) {
-                        cout << internal_name << metropolis_name << "Accepted with probability" << endl;
-                        free_energy_current = free_energy_trial;
+                    if (free_energy_trial - free_energy_current <= 0.0) {
+                        cout << internal_name << metropolis_name << "Accepted" << endl;
                         n_times_mu = GetN_times_mu();
+                        free_energy_current = free_energy_trial;
                         accepted++;
                     } else {
-                        cout << internal_name << metropolis_name << "Rejected" << endl;
-                        MakeMove(true);
-                        CP(to_segment);
-                        cout << internal_name << metropolis_name << "returning back the system configuration... " << endl;
-                        New[0]->Solve(true);
-                        // TODO check cleng returned to normal numbers... [2nd solution]
-                        rejected++;
-                        cout << "... [Done]" << endl;
+                        Real acceptance = rand.getReal(0, 1);
+
+                        if (acceptance < exp((-1.0/prefactor_kT) * (free_energy_trial - free_energy_current))) {
+                            cout << internal_name << metropolis_name << "Accepted with probability" << endl;
+                            free_energy_current = free_energy_trial;
+                            n_times_mu = GetN_times_mu();
+                            accepted++;
+                        } else {
+                            cout << internal_name << metropolis_name << "Rejected" << endl;
+                            MakeMove(true);
+                            CP(to_segment);
+                            cout << internal_name << metropolis_name << "returning back the system configuration... " << endl;
+                            New[0]->Solve(true);
+                            // TODO check cleng returned to normal numbers... [2nd solution]
+                            rejected++;
+                            cout << "... [Done]" << endl;
+                        }
                     }
                 }
             }
-        }
-        if (metropolis) {
-            cout << internal_name << analysis_name << "Monte Carlo attempt: " << MC_attempt << endl;
-            cout << internal_name << analysis_name << "Accepted: # " << accepted << " | " << 100 * (accepted / MC_attempt) << "%" << endl;
-            cout << internal_name << analysis_name << "Rejected: # " << rejected << " | " << 100 * (rejected / MC_attempt) << "%" << endl;
-            cout << internal_name << analysis_name << "Cleng_rejected: # " << cleng_rejected << endl;
-        }
-        
-        cout << internal_name << "Saving... " << MC_attempt + MCS_checkpoint << endl;
-        if (((MC_attempt + MCS_checkpoint) % delta_save) == 0) WriteOutput();
-        if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
-        if (cleng_dis) WriteClampedNodeDistance();
-        if (cleng_pos) WriteClampedNodePosition();
+            if (metropolis) {
+                cout << internal_name << analysis_name << "Monte Carlo attempt: " << MC_attempt << endl;
+                cout << internal_name << analysis_name << "Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / MC_attempt) << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
+                cout << internal_name << analysis_name << "Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / MC_attempt) << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
+                cout << internal_name << analysis_name << "Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+            }
+
+            if (success_move) {
+                auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
+                cout << internal_name << "Saving... " << num << endl;
+                if ((int(num) % delta_save) == 0) WriteOutput(int(num));
+                if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
+                if (cleng_dis) WriteClampedNodeDistance(int(num));
+                if (cleng_pos) WriteClampedNodePosition(int(num));
+            }
 #ifdef CLENG_EXPERIMENTAL
-        save2h5();
+            save2h5();
 #endif
-        if (cleng_flag_termination) break;
+            if (cleng_flag_termination) break;
+            cout << endl;
+        }
 
         cout << endl;
-    }
+        cout << "Finally:" << endl;
+        cout << internal_name << analysis_name << "Monte Carlo attempts: " << MC_attempt-1 << endl;
+        cout << internal_name << analysis_name << "Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (accepted / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
+        cout << internal_name << analysis_name << "Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (rejected / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
+        cout << internal_name << analysis_name << "Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
 
-    cout << endl;
-    cout << "Finally:" << endl;
-    cout << internal_name << analysis_name << "Monte Carlo attempts: " << MC_attempt-1 << endl;
-    cout << internal_name << analysis_name << "Accepted: # " << accepted << " | " << 100 * (accepted / (MC_attempt-1)) << "%" << endl;
-    cout << internal_name << analysis_name << "Rejected: # " << rejected << " | " << 100 * (rejected / (MC_attempt-1)) << "%" << endl;
-    cout << internal_name << analysis_name << "Cleng_rejected: # " << cleng_rejected << endl;
+    }
 
     end_simulation= std::chrono::steady_clock::now();
     std::cout << "# It took (s) = " << std::chrono::duration_cast<std::chrono::seconds> (end_simulation - begin_simulation).count() <<
