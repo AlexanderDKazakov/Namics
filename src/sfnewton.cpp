@@ -938,6 +938,10 @@ int nvar=nvar_;
 
 		if (e_info) printf("DIIS has been notified\n");
 		if (e_info) printf("Your guess = %1e \n",residual);
+
+        //last_residual = residual;
+        if (residual == 0.0) cout << "[Warning] Residual equal zero!" << endl;
+        if (std::isinf(residual) or std::isinf(-residual)) cout << "[Warning] Residual equal inf/-inf!" << endl;
 		while ( residual > tolerance and iterations < iterationlimit) {
 			iterations++;
 			Cp(x0,x,nvar);
@@ -951,6 +955,7 @@ int nvar=nvar_;
 			if(e_info && iterations%i_info == 0){
 				printf("iterations = %i g = %1e \n",iterations,residual);
 			}
+            if (residual == 0.0) cout << "[Warning] Residual equal zero!" << endl;
 		}
 
 		success=Message(e_info,s_info,iterations,iterationlimit,residual,tolerance,"");

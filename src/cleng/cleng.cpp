@@ -636,12 +636,12 @@ bool Cleng::MonteCarlo(bool save_vector) {
     }
 
 // Analysis MC
+    Analyzer analyzer;
     accepted = 0.0;
     rejected = 0.0;
     cleng_rejected = 0.0;
     MC_attempt = 0; // initial value for loop and cleng_writer
     make_BC();
-
 
 // init system outlook
     if (!loaded) {
@@ -708,18 +708,18 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 }
 
                 success_iteration = New[0]->Solve(true);
-                //// Simulation without rescue procedure ---> TODO: [1nd solution]
+                //// Simulation without rescue procedure --->
                 if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
                     cout << "%?% Sorry, Free Energy is NaN. " << endl;
                     cout << "%?% Here is result from solver: " << success_iteration << endl;
 
                     cout << "%?% The step will be rejected! "
                             "Probably your system is too dense! "
-                            "Simulation will continue... " << endl;
+                            "Simulation will stop... " << endl;
                     cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
                     MakeMove(true);
                     cleng_rejected++;
-                    continue;
+                    break;
                 } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
                 //// Simulation without rescue procedure <---
 
@@ -727,15 +727,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
 //                if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
 //                    cout << "%?% Sorry, Free Energy is NaN.  " << endl;
 //                    cout << "%?% Here is result from solver: " << success_iteration << endl;
-////                    New[0]->rescue_status = NONE;  # TODO need to rescue?
+// //                    New[0]->rescue_status = NONE;  # TODO need to rescue?
 //                    New[0]->attempt_DIIS_rescue();
 //                    cout << "%?% Restarting iteration." << endl;
 //                    success_iteration = New[0]->Solve(true);
-//
+
 //                    if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
 //                        cout << "%?% Sorry, Free Energy is still NaN. " << endl;
 //                        cout << "%?% Here is result from solver: " << success_iteration << endl;
-//
+
 //                        cout << "%?% The step will be rejected! "
 //                                "Probably your system is too dense! "
 //                                "Simulation will continue... " << endl;
@@ -799,13 +799,23 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
                 if (cleng_dis) WriteClampedNodeDistance(int(num));
                 if (cleng_pos) WriteClampedNodePosition(int(num));
+
+                Real Re_value = analyzer.calculateRe(pivot_arm_nodes, nodes_map);
+                cout << "Rce_value:" << Re_value << endl;
+                vector<Real> vtk;
+                for (auto && line : out_per_line) {
+                    vtk.clear();
+                    vtk = prepare_vtk(line[0], line[1], line[2]);
+                    analyzer.calculateRg(vtk);
+                }
+                
             }
 #ifdef CLENG_EXPERIMENTAL
             save2h5();
 #endif
             if (cleng_flag_termination) break;
             cout << endl;
-        }
+        }  // main loop
 
         cout << endl;
         cout << "Finally:" << endl;

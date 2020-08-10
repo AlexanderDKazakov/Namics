@@ -20,6 +20,7 @@
 #include "nodes/simple_node.h"
 #include "nodes/monolit.h"
 #include "nodes/point.h"
+#include "analyzer/analyzer.h"
 //#include "matrix.h"
 #include "checkpoint/checkpoint.h"
 #include "random/random.h"
