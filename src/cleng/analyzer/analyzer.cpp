@@ -33,21 +33,21 @@ Real Analyzer::calculateRg() {
     Real mass = 0.0;
 
     for (auto &&point : pointsFromVtk) {
-        mass += point.v;
+        mass += point.second.v;
     }
     // cm
 	Real xtemp = 0.0, ytemp = 0.0, ztemp = 0.0;
     for (auto &&point : pointsFromVtk) {
-        xtemp += point.x * point.v;
-        ytemp += point.y * point.v;
-        ztemp += point.z * point.v;
+        xtemp += point.second.x * point.second.v;
+        ytemp += point.second.y * point.second.v;
+        ztemp += point.second.z * point.second.v;
     }
     Point cm = Point(int(xtemp / mass), int(ytemp/mass), int(ztemp/mass));
 
     Point cdist;
     for (auto &&point : pointsFromVtk) {
-        cdist = point-cm;
-        RG2 += point.v * (pow(cdist.x, 2) + pow(cdist.y, 2) + pow(cdist.z, 2));
+        cdist = point.second-cm;
+        RG2 += point.second.v * (pow(cdist.x, 2) + pow(cdist.y, 2) + pow(cdist.z, 2));
     }
     // shift[due to vtk file construction!] --> in order to compare with Namics representation
     cout << "[Rg2 output] Mass:" << mass                                   << "; ";
@@ -75,8 +75,7 @@ map<int, vector<Real>> Analyzer::calculatePhi() const {
     return res;
 }
 
-vector<Point> Analyzer::convertVtk2Points(const vector<Real> &vtk, const Point& box) {
-    vector<Point> points;
+map<string, Point> Analyzer::convertVtk2Points(const vector<Real> &vtk, const Point& box) {
     map<string, Point> xyz_point_map;
     int x = 0, y = 0, z = 0;
 
@@ -91,14 +90,13 @@ vector<Point> Analyzer::convertVtk2Points(const vector<Real> &vtk, const Point& 
             x++;
         }
         Point p = Point(x, y, z, value);
-        xyz_point_map[to_string(x)+to_string(y)+to_string(z)] = p;
-        points.push_back(p);
+        xyz_point_map["x"+to_string(x)+"y"+to_string(y)+"z"+to_string(z)] = p;
         z++;
     }
-    return points;
+    return xyz_point_map;
 }
 
-map<int, vector<Point>> Analyzer::convertPoints2LayerPoints(const vector<Point>& points4converting) const {
+map<int, vector<Point>> Analyzer::convertPoints2LayerPoints(const map<string, Point>& points4converting) const {
     map<int, vector<Point>> res;
 
     map<int, vector<Point>> m = get_layer_point_map();  // layer <--> point | map
@@ -106,19 +104,15 @@ map<int, vector<Point>> Analyzer::convertPoints2LayerPoints(const vector<Point>&
     for (auto const& pair_layer_points : m) {
 //        cout << "[P2LP] Layer: " << pair_layer_points.first << "| size: " << pair_layer_points.second.size() << endl;
         for (auto const& pointInLayer : pair_layer_points.second) {
-            //
-            for (auto const& point4converting : points4converting) {
-                if (point4converting == pointInLayer) {
-                    res[pair_layer_points.first].push_back(point4converting);
-                }
-            }
+            Point p = points4converting.at("x"+to_string(pointInLayer.x)+"y"+to_string(pointInLayer.y)+"z"+to_string(pointInLayer.z));
+            res[pair_layer_points.first].push_back(p);
         }
     }
     return res;
 }
 
 void Analyzer::updateVtk2PointsRepresentation(const vector<Real> &vtk, const Point &box) {
-    pointsFromVtk = convertVtk2Points(vtk, box);
+    pointsFromVtk    = convertVtk2Points(vtk, box);
     layer_points_map = convertPoints2LayerPoints(pointsFromVtk);
 }
 

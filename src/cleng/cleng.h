@@ -226,7 +226,6 @@ public:
 
 #ifdef CLENG_EXPERIMENTAL
     void save2h5vtk();
-//    void save2h5phi();
     void save2h5(string what, vector<int> dims, vector<Real> value);
 #endif
 };

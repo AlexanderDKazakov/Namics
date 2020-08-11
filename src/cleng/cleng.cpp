@@ -673,9 +673,9 @@ bool Cleng::MonteCarlo(bool save_vector) {
 #endif
 
     cout << "Initialization done.\n" << endl;
-    Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
-    int requested_layers = (box.x / 2);
-    Analyzer analyzer = Analyzer(requested_layers, core);
+//    Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
+//    int requested_layers = (box.x / 2);
+//    Analyzer analyzer = Analyzer(requested_layers, core);
 
     if (MCS) {
 
@@ -802,27 +802,27 @@ bool Cleng::MonteCarlo(bool save_vector) {
             }
 
             if (success_move) {
-                vector<Real> vtk;
-                vtk.clear();
-                vtk = prepare_vtk("mol", "pol", "phi");
-                analyzer.updateVtk2PointsRepresentation(vtk, box);
-                // Re
-                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
-                // Rg
-                Real Rg2_value = analyzer.calculateRg();
-                // phi
-                Real nr_check_sum = 0, phi_check_sum = 0;
-                map<int, vector<Real>> phi = analyzer.calculatePhi();
-                for (auto const& pair : phi) {
-                    cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
-                    nr_check_sum  += pair.second[0];
-                    phi_check_sum += pair.second[1];
-                    for (auto const& value : pair.second) {
-                        cout << value << " ";
-                    }
-                    cout << endl;
-                }
-                cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
+//                vector<Real> vtk;
+//                vtk.clear();
+//                vtk = prepare_vtk("mol", "pol", "phi");
+//                analyzer.updateVtk2PointsRepresentation(vtk, box);
+//                // Re
+//                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
+//                // Rg
+//                Real Rg2_value = analyzer.calculateRg();
+//                // phi
+//                Real nr_check_sum = 0, phi_check_sum = 0;
+//                map<int, vector<Real>> phi = analyzer.calculatePhi();
+//                for (auto const& pair : phi) {
+//                    cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
+//                    nr_check_sum  += pair.second[0];
+//                    phi_check_sum += pair.second[1];
+//                    for (auto const& value : pair.second) {
+//                        cout << value << " ";
+//                    }
+//                    cout << endl;
+//                }
+//                cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
 
                 auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
                 cout << internal_name << "Saving... " << num << endl;

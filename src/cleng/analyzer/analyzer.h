@@ -28,12 +28,12 @@ public:
     Analyzer () = default;
 
     Cube c;
-    vector<Point> pointsFromVtk;
+    map<string, Point> pointsFromVtk;
     map<int, vector<Point>> layer_points_map;
 
-    static vector<Point> convertVtk2Points(const vector<Real>& vtk, const Point& box);
     void updateVtk2PointsRepresentation(const vector<Real>& vtk, const Point& box);
-    map<int, vector<Point>> convertPoints2LayerPoints(const vector<Point>& points4converting) const;
+    static map<string, Point> convertVtk2Points(const vector<Real>& vtk, const Point& box);
+    map<int, vector<Point>> convertPoints2LayerPoints(const map<string, Point>& points4converting) const;
     static Real calculateRe(map<int, vector<int>> pivot_arm_nodes, map<int, vector<std::shared_ptr<Node>>> nodes_map);
     Real calculateRg();
     map<int, vector<Real>> calculatePhi() const;
