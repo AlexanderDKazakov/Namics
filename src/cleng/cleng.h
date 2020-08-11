@@ -33,8 +33,8 @@
 
 static const string CLENG_MAJOR_VERSION = "1";
 static const string CLENG_MINOR_VERSION = "4";
-static const string CLENG_PATCH = "3";
-static const string CLENG_INTERNAL_VERSION = "153";
+static const string CLENG_PATCH = "4";
+static const string CLENG_INTERNAL_VERSION = "154";
 static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ")";
 
 class Cleng {
@@ -84,7 +84,9 @@ public:
     Point box{Lat[0]->MX, Lat[0]->MY, Lat[0]->MZ};
     Point J{Lat[0]->JX, Lat[0]->JY, 1};
     vector<int> dims_vtk{box.x * box.y * box.z, 1};
+    vector<int> dims_phi{box.x / 2 , 1};
     vector<int> dims_3 = {1, 3};
+    vector<int> dims_2 = {1, 2};
 
     int clamp_seg{};
     int clp_mol{};
@@ -223,8 +225,9 @@ public:
     Real GetN_times_mu();
 
 #ifdef CLENG_EXPERIMENTAL
-    vector<Real> vtk;
-    void save2h5();
+    void save2h5vtk();
+//    void save2h5phi();
+    void save2h5(string what, vector<int> dims, vector<Real> value);
 #endif
 };
 

@@ -22,15 +22,20 @@ private:
     };
 
 public:
-    Analyzer(int requested_layer, const Point& core) {
-        c.construct_cube(requested_layer, core);
+    Analyzer(int requested_layers, const Point& core) {
+        c.construct_cube(requested_layers, core);
     }
     Analyzer () = default;
 
     Cube c;
+    vector<Point> pointsFromVtk;
+    map<int, vector<Point>> layer_points_map;
 
+    static vector<Point> convertVtk2Points(const vector<Real>& vtk, const Point& box);
+    void updateVtk2PointsRepresentation(const vector<Real>& vtk, const Point& box);
+    map<int, vector<Point>> convertPoints2LayerPoints(const vector<Point>& points4converting) const;
     static Real calculateRe(map<int, vector<int>> pivot_arm_nodes, map<int, vector<std::shared_ptr<Node>>> nodes_map);
-    static Real calculateRg(const vector<Real>& vtk, const Point& box);
-
-    map<int, vector<Point>> get_layer_point_map() {return c.get_layer_point_map();};
+    Real calculateRg();
+    map<int, vector<Real>> calculatePhi() const;
+    map<int, vector<Point>> get_layer_point_map() const {return c.get_layer_point_map();};
 };

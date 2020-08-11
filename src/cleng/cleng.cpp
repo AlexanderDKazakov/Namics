@@ -636,10 +636,6 @@ bool Cleng::MonteCarlo(bool save_vector) {
     }
 
 // Analysis MC
-    Point central_node = Point(0,0,0) // pivot_arm_nodes[0].begin()[0]; TODO FINISH IT
-    Analyzer analyzer = Analyzer((box.x / 2) + 1, central_node);
-    auto map = analyzer.get_layer_point_map();
-
     accepted = 0.0;
     rejected = 0.0;
     cleng_rejected = 0.0;
@@ -669,10 +665,17 @@ bool Cleng::MonteCarlo(bool save_vector) {
     if (cleng_pos) WriteClampedNodePosition(MC_attempt + MCS_checkpoint);
 
 #ifdef CLENG_EXPERIMENTAL
-    save2h5();
+    save2h5vtk();
+    // free energy calculation
+    n_times_mu = GetN_times_mu();
+    vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
+    save2h5("free_energy", dims_3, MC_free_energy);
 #endif
 
     cout << "Initialization done.\n" << endl;
+    Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
+    int requested_layers = (box.x / 2);
+    Analyzer analyzer = Analyzer(requested_layers, core);
 
     if (MCS) {
 
@@ -788,14 +791,39 @@ bool Cleng::MonteCarlo(bool save_vector) {
                     }
                 }
             }
+
+            cout << internal_name << analysis_name << endl;
+
             if (metropolis) {
-                cout << internal_name << analysis_name << "Monte Carlo attempt: " << MC_attempt << endl;
-                cout << internal_name << analysis_name << "Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / MC_attempt) << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
-                cout << internal_name << analysis_name << "Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / MC_attempt) << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
-                cout << internal_name << analysis_name << "Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+                cout << "Monte Carlo attempt: " << MC_attempt << endl;
+                cout << "           Accepted: # " << setw(2) << accepted       << " | " << setw(2) << 100 * (accepted / MC_attempt)       << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
+                cout << "           Rejected: # " << setw(2) << rejected       << " | " << setw(2) << 100 * (rejected / MC_attempt)       << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
+                cout << "     Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
             }
 
             if (success_move) {
+                vector<Real> vtk;
+                vtk.clear();
+                vtk = prepare_vtk("mol", "pol", "phi");
+                analyzer.updateVtk2PointsRepresentation(vtk, box);
+                // Re
+                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
+                // Rg
+                Real Rg2_value = analyzer.calculateRg();
+                // phi
+                Real nr_check_sum = 0, phi_check_sum = 0;
+                map<int, vector<Real>> phi = analyzer.calculatePhi();
+                for (auto const& pair : phi) {
+                    cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
+                    nr_check_sum  += pair.second[0];
+                    phi_check_sum += pair.second[1];
+                    for (auto const& value : pair.second) {
+                        cout << value << " ";
+                    }
+                    cout << endl;
+                }
+                cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
+
                 auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
                 cout << internal_name << "Saving... " << num << endl;
                 if ((int(num) % delta_save) == 0) WriteOutput(int(num));
@@ -803,18 +831,25 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 if (cleng_dis) WriteClampedNodeDistance(int(num));
                 if (cleng_pos) WriteClampedNodePosition(int(num));
 
-                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
-                cout << "Rce_value:" << Re_value << endl;
-                vector<Real> vtk;
-                vtk.clear();
-                vtk = prepare_vtk("mol", "pol", "phi");
-                Real Rg2_value = Analyzer::calculateRg(vtk, box);
-                cout << "Rg2_value:" << Rg2_value << endl;
-                cout << "Rg_value:" << pow(Rg2_value, 0.5) << endl;
-
             }
+
 #ifdef CLENG_EXPERIMENTAL
-            save2h5();
+            save2h5vtk();
+            // free energy calculation
+            n_times_mu = GetN_times_mu();
+            vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
+            save2h5("free_energy", dims_3, MC_free_energy);
+            // Re
+            vector<Real> MC_Re = {static_cast<Real>(MC_attempt+MCS_checkpoint), Re_value};
+            save2h5("Re", dims_2, MC_Re);
+            // Rg
+            vector<Real> MC_Rg2 = {static_cast<Real>(MC_attempt+MCS_checkpoint), Rg2_value};
+            save2h5("Rg2", dims_2, MC_Rg2);
+            // phi
+            vector<Real> phi_vector; vector<Real> nr_vector;
+            for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
+            save2h5("phi"+to_string(MC_attempt+MCS_checkpoint), dims_phi, phi_vector);
+            save2h5("nr"+to_string(MC_attempt+MCS_checkpoint), dims_phi, nr_vector);
 #endif
             if (cleng_flag_termination) break;
             cout << endl;

@@ -57,6 +57,10 @@ public:
         return "{ " + std::to_string(this->x) + ", " + std::to_string(this->y) + ", " + std::to_string(this->z) + " }";
     }
 
+    Real get_value() const {
+        return this->v;
+    }
+
     std::string to_string_v() const {
         return "value: "+std::to_string(this->v) +"{ " + std::to_string(this->x) + ", " + std::to_string(this->y) + ", " + std::to_string(this->z) + " }";
     }

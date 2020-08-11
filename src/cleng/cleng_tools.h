@@ -500,18 +500,19 @@ Real Cleng::GetN_times_mu() {
 }
 
 #ifdef CLENG_EXPERIMENTAL
-    void Cleng::save2h5() {
+    void Cleng::save2h5vtk() {
         // vtk profiles per line of h5
+        vector<Real> vtk;
         for (auto && line : out_per_line) {
             vtk.clear();
             vtk = prepare_vtk(line[0], line[1], line[2]);
             if (vtk.size() == (unsigned int)dims_vtk[0]) cleng_writer.write("/VTK_data", "vtk_"+line[0]+"|"+line[1]+"|"+line[2]+to_string(MC_attempt+MCS_checkpoint), dims_vtk, vtk);
             else cout << "vtk file was not saved because 'profile' was not found for " << line[0] << "|" << line[1] << "|" << line[2] << endl;
         }
-
-        // free energy calculation
-        n_times_mu = GetN_times_mu();
-        vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
-        cleng_writer.append("/Free_energy", "free_energy", dims_3, MC_free_energy);
     }
+
+    void Cleng::save2h5(string what, vector<int> dims, vector<Real> value) {
+        cleng_writer.append("/system_info", what, dims, value);
+    }
+
 #endif
