@@ -673,9 +673,9 @@ bool Cleng::MonteCarlo(bool save_vector) {
 #endif
 
     cout << "Initialization done.\n" << endl;
-//    Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
-//    int requested_layers = (box.x / 2);
-//    Analyzer analyzer = Analyzer(requested_layers, core);
+    Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
+    int requested_layers = (box.x / 2);
+    Analyzer analyzer = Analyzer(requested_layers, core);
 
     if (MCS) {
 
@@ -802,36 +802,44 @@ bool Cleng::MonteCarlo(bool save_vector) {
             }
 
             if (success_move) {
-//                vector<Real> vtk;
-//                vtk.clear();
-//                vtk = prepare_vtk("mol", "pol", "phi");
-//                analyzer.updateVtk2PointsRepresentation(vtk, box);
-//                // Re
-//                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
-//                // Rg
-//                Real Rg2_value = analyzer.calculateRg();
-//                // phi
-//                Real nr_check_sum = 0, phi_check_sum = 0;
-//                map<int, vector<Real>> phi = analyzer.calculatePhi();
-//                for (auto const& pair : phi) {
-//                    cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
-//                    nr_check_sum  += pair.second[0];
-//                    phi_check_sum += pair.second[1];
-//                    for (auto const& value : pair.second) {
-//                        cout << value << " ";
-//                    }
-//                    cout << endl;
-//                }
-//                cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
-
                 auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
                 cout << internal_name << "Saving... " << num << endl;
                 if ((int(num) % delta_save) == 0) WriteOutput(int(num));
                 if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
                 if (cleng_dis) WriteClampedNodeDistance(int(num));
                 if (cleng_pos) WriteClampedNodePosition(int(num));
-
             }
+            
+            vector<Real> vtk;
+            vtk.clear();
+            vtk = prepare_vtk("mol", "pol", "phi");
+            analyzer.updateVtk2PointsRepresentation(vtk, box);
+            // Re
+            Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
+            // Rg
+            Real Rg2_value = analyzer.calculateRg();
+            // phi
+            Real nr_check_sum = 0, phi_check_sum = 0;
+            map<int, vector<Real>> phi = analyzer.calculatePhi();
+            for (auto const& pair : phi) {
+                cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
+                nr_check_sum  += pair.second[0];
+                phi_check_sum += pair.second[1];
+                for (auto const& value : pair.second) {
+                    cout << value << " ";
+                }
+                cout << endl;
+            }
+            cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
+
+            Write2File(MC_attempt+MCS_checkpoint, "re",  Re_value);
+            Write2File(MC_attempt+MCS_checkpoint, "rg2", Rg2_value);
+            
+            vector<Real> phi_vector; vector<Real> nr_vector;
+            phi_vector.clear(); nr_vector.clear();
+            for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
+            Write2File(MC_attempt+MCS_checkpoint, "phi", phi_vector);
+            Write2File(MC_attempt+MCS_checkpoint, "nr", phi_vector);
 
 #ifdef CLENG_EXPERIMENTAL
             save2h5vtk();
@@ -839,17 +847,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
             n_times_mu = GetN_times_mu();
             vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
             save2h5("free_energy", dims_3, MC_free_energy);
-            // Re
-            vector<Real> MC_Re = {static_cast<Real>(MC_attempt+MCS_checkpoint), Re_value};
-            save2h5("Re", dims_2, MC_Re);
-            // Rg
-            vector<Real> MC_Rg2 = {static_cast<Real>(MC_attempt+MCS_checkpoint), Rg2_value};
-            save2h5("Rg2", dims_2, MC_Rg2);
-            // phi
-            vector<Real> phi_vector; vector<Real> nr_vector;
-            for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
-            save2h5("phi"+to_string(MC_attempt+MCS_checkpoint), dims_phi, phi_vector);
-            save2h5("nr"+to_string(MC_attempt+MCS_checkpoint), dims_phi, nr_vector);
+            // Not working yet.
+            //// ReRg2
+            //vector<Real> MC_ReRg2 = {static_cast<Real>(MC_attempt+MCS_checkpoint), Re_value, Rg2_value};
+            //save2h5("ReRg2", dims_3, MC_ReRg2);
+            //// phi
+            //vector<Real> phi_vector; vector<Real> nr_vector;
+            //for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
+            //save2h5("phi/phi"+to_string(MC_attempt+MCS_checkpoint), dims_phi, phi_vector);
+            //save2h5("nr/nr"+to_string(MC_attempt+MCS_checkpoint), dims_phi, nr_vector);
 #endif
             if (cleng_flag_termination) break;
             cout << endl;

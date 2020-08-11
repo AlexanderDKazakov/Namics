@@ -83,6 +83,7 @@ public:
     string filename;
     Point box{Lat[0]->MX, Lat[0]->MY, Lat[0]->MZ};
     Point J{Lat[0]->JX, Lat[0]->JY, 1};
+    // {row, col}
     vector<int> dims_vtk{box.x * box.y * box.z, 1};
     vector<int> dims_phi{box.x / 2 , 1};
     vector<int> dims_3 = {1, 3};
@@ -191,6 +192,9 @@ public:
     void WriteClampedNodeDistance(int num);
 
     void WriteClampedNodePosition(int num);
+    
+    void Write2File(int step, string what, Real value);
+    void Write2File(int step, string what, vector<Real> values);
 
     void make_BC();
 

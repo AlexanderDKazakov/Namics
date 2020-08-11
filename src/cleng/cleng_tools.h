@@ -486,6 +486,27 @@ void Cleng::WriteClampedNodePosition(int num) {
     }
 }
 
+void Cleng::Write2File(int step, string what, Real value) {
+
+    ofstream outfile;
+    outfile.open(filename + "." +what, std::ios_base::app);
+
+//    cout
+    outfile << step << " " << value << endl;
+}
+
+void Cleng::Write2File(int step, string what, vector<Real> values) {
+
+    ofstream outfile;
+    outfile.open(filename + "." +what, std::ios_base::app);
+
+//    cout
+    outfile << step << endl;;
+    for (auto const& v : values) {
+        outfile << v << endl;
+    }
+    outfile << endl;
+}
 
 Real Cleng::GetN_times_mu() {
     int n_mol = (int) In[0]->MolList.size();
@@ -512,7 +533,7 @@ Real Cleng::GetN_times_mu() {
     }
 
     void Cleng::save2h5(string what, vector<int> dims, vector<Real> value) {
-        cleng_writer.append("/system_info", what, dims, value);
+        cleng_writer.append("/system_info/", what, dims, value);
     }
 
 #endif
