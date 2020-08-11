@@ -11,16 +11,20 @@ public:
     int x;
     int y;
     int z;
+    Real v;
 
     Point(const Point &point) {
         x = point.x;
         y = point.y;
         z = point.z;
+        v = point.v;
     }
 
-    Point(int x, int y, int z) : x(x), y(y), z(z) {}
+    Point(int x, int y, int z) : x(x), y(y), z(z), v(0.0) {}
 
-    Point() : x(0), y(0), z(0) {}
+    Point(int x, int y, int z, Real v) : x(x), y(y), z(z), v(v) {}
+
+    Point() : x(0), y(0), z(0), v(0.0) {}
 
     Point negate() const { return {-x, -y, -z}; }
 
@@ -37,6 +41,8 @@ public:
 
     Point operator%(const Point &box) const { return {x % box.x, y % box.y, z % box.z}; }
 
+    Point operator*(int multiplier) const { return {multiplier * x, multiplier * y, multiplier *z}; }
+
     bool operator==(const Point &p) const { return x == p.x && y == p.y && z == p.z; }
 
     bool operator!=(const Point &p) const { return x != p.x || y != p.y || z != p.z; }
@@ -49,6 +55,10 @@ public:
 
     std::string to_string() const {
         return "{ " + std::to_string(this->x) + ", " + std::to_string(this->y) + ", " + std::to_string(this->z) + " }";
+    }
+
+    std::string to_string_v() const {
+        return "value: "+std::to_string(this->v) +"{ " + std::to_string(this->x) + ", " + std::to_string(this->y) + ", " + std::to_string(this->z) + " }";
     }
 
     Real distance(const Point &other) const {

@@ -22,54 +22,114 @@ Real Analyzer::calculateRe(map<int, vector<int>> pivot_arm_nodes, map<int, vecto
 }
 
 
-Real Analyzer::calculateRg(vector<Real> vtk) {
-    Real RG = 0.0;
+Real Analyzer::calculateRg(const vector<Real>& vtk, const Point& box) {
+    Real RG2 = 0.0;
     Real mass = 0.0;
+    vector<Point> points;
+    int x = 0, y = 0, z = 0;
 
-    // FINISH IT!
+    cout << "Box: " << box.to_string() << endl;
 
     // calculating mass + point representation of the array
     for (auto &&value : vtk) {
         mass += value;
-
-        if z == boxSize {
-            z = z % boxSize
-            y++
+        if (z == box.z) {
+            z = z % box.z;
+            y++;
         }
-        if y == boxSize {
-            y = y % boxSize
-            x++
+        if (y == box.y) {
+            y = y % box.y;
+            x++;
         }
-
-        p := NewPoint(x, y, z, f)
-        points = append(points, *p)
-        z++
-
+        Point p = Point(x, y, z, value);
+        points.push_back(p);
+        z++;
     }
-
     cout << "Mass:" << mass << endl;
     // cm
-	Real xtemp, ytemp, ztemp  = 0.0, 0.0, 0.0
-    
-    for (auto &&)
-
-	for _, point := range points {
-		xtemp += (float64(point.x) * point.v)
-		ytemp += (float64(point.y) * point.v)
-		ztemp += (float64(point.z) * point.v)
-	}
-	cm := Point{int(xtemp / mass), int(ytemp / mass), int(ztemp / mass), 0.0}
-	fmt.Println("Center of mass: ", cm)
-
-	var cdist Point
-	for _, point := range points {
-		cdist = point.SubPoint(cm)
-		rg2 += point.v * (math.Pow(float64(cdist.x), 2) + math.Pow(float64(cdist.y), 2) + math.Pow(float64(cdist.z), 2))
-	}
-	rg2 /= mass
-	fmt.Println("Rg2:", rg2)
-
-    // need code
-    return RG;
+	Real xtemp = 0.0, ytemp = 0.0, ztemp = 0.0;
+    for (auto &&point : points) {
+        xtemp += point.x * point.v;
+        ytemp += point.y * point.v;
+        ztemp += point.z * point.v;
+    }
+    Point cm = Point(int(xtemp / mass), int(ytemp/mass), int(ztemp/mass));
+    cout << "Center of mass " << cm.to_string() << endl;
+    Point cdist;
+    for (auto &&point : points) {
+        cdist = point-cm;
+        RG2 += point.v * (pow(cdist.x, 2) + pow(cdist.y, 2) + pow(cdist.z, 2));
+    }
+    return RG2 / mass;
 }
 
+//vector<Point> Cube::get_cube_odd(int layers, const Point& core, int layer) {
+//    vector<Point> res;
+//
+//    int start = layers / 2;
+//    int end   = (layers / 2) + 1;
+//
+//    // Template
+//    Point a1 = Point(1, 0, 0);
+//    Point a2 = Point(0, 1, 0);
+//    Point a3 = Point(0, 0, 1);
+//
+//    for (int n1 = start; n1 < end; n1++) {
+//        for (int n2 = start; n2 < end; n2++) {
+//            for (int n3 = start; n3 < end ; n3++) {
+//                Point r = a1*n1 + a2*n2 + a3*n3 + core;
+//                if (r.x == layer or r.y == layer or r.z == layer) {
+//                    res.push_back(r);
+//                }
+//            }
+//        }
+//    }
+//
+//    return res;
+//}
+
+//map<int, vector<Point>> Cube::get_layer_point_map() {
+//    return layer_point_map;
+//}
+
+vector<Point> Analyzer::Cube::get_cube_odd(int layers, const Point &core, int layer) {
+    vector<Point> res;
+
+    int start = -layers / 2;
+    int end   = (layers / 2) + 1;
+
+    // Template
+    Point a1 = Point(1, 0, 0);
+    Point a2 = Point(0, 1, 0);
+    Point a3 = Point(0, 0, 1);
+
+    for (int n1 = start; n1 < end; n1++) {
+        for (int n2 = start; n2 < end; n2++) {
+            for (int n3 = start; n3 < end ; n3++) {
+                Point r = a1*n1 + a2*n2 + a3*n3 + core;
+//                cout << "r: " << r.to_string() << endl;
+                if ( abs(r.x) == core.x + layer or abs(r.y) == core.y + layer or abs(r.z) == core.z + layer) {
+//                    cout << "ADDED!" << endl;
+                    res.push_back(r);
+                }
+            }
+        }
+    }
+
+    return res;
+}
+
+map<int, vector<Point>> Analyzer::Cube::get_layer_point_map() const {
+    return layer_point_map;
+}
+
+void Analyzer::Cube::construct_cube(int requested_layers, const Point &core) {
+    cout << "[Cube] init..." << endl;
+    layer_point_map[0] = get_cube_odd(0, core, 0);
+    cout << "[Cube] preparing appropriate cube..." << endl;
+    for (int current_layer = 1; current_layer < requested_layers; current_layer++){
+        cout << "[Cube] layer:"<< current_layer << endl;
+        layer_point_map[current_layer] = get_cube_odd(current_layer*2+1, core, current_layer);
+    }
+
+}

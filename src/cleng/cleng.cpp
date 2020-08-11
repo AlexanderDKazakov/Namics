@@ -636,7 +636,10 @@ bool Cleng::MonteCarlo(bool save_vector) {
     }
 
 // Analysis MC
-    Analyzer analyzer;
+    Point central_node = Point(0,0,0) // pivot_arm_nodes[0].begin()[0]; TODO FINISH IT
+    Analyzer analyzer = Analyzer((box.x / 2) + 1, central_node);
+    auto map = analyzer.get_layer_point_map();
+
     accepted = 0.0;
     rejected = 0.0;
     cleng_rejected = 0.0;
@@ -800,15 +803,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 if (cleng_dis) WriteClampedNodeDistance(int(num));
                 if (cleng_pos) WriteClampedNodePosition(int(num));
 
-                Real Re_value = analyzer.calculateRe(pivot_arm_nodes, nodes_map);
+                Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
                 cout << "Rce_value:" << Re_value << endl;
                 vector<Real> vtk;
-                for (auto && line : out_per_line) {
-                    vtk.clear();
-                    vtk = prepare_vtk(line[0], line[1], line[2]);
-                    analyzer.calculateRg(vtk);
-                }
-                
+                vtk.clear();
+                vtk = prepare_vtk("mol", "pol", "phi");
+                Real Rg2_value = Analyzer::calculateRg(vtk, box);
+                cout << "Rg2_value:" << Rg2_value << endl;
+                cout << "Rg_value:" << pow(Rg2_value, 0.5) << endl;
+
             }
 #ifdef CLENG_EXPERIMENTAL
             save2h5();
