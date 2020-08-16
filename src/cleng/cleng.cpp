@@ -45,6 +45,7 @@ Cleng::Cleng(
     KEYS.emplace_back("pivot+one_node");
     KEYS.emplace_back("pivot+one_bond");
     KEYS.emplace_back("h5");
+    KEYS.emplace_back("warming_up_steps");
 
     // Debug.log
     //out.open("debug.out", ios_base::out);
@@ -205,6 +206,13 @@ bool Cleng::CheckInput(int start, bool save_vector) {
             }
         } else axis = 0;
         if (debug) cout << "movement_along axis " << axis << endl;
+
+        // warming_up_steps
+        if (!GetValue("warming_up_steps").empty()) {
+            success = In[0]->Get_int(GetValue("warming_up_steps"), warming_up_steps, 1, 1000, "The seed should be between 1 and 1000");
+            if (!success) { warming_up_steps = 10; cout << "The warming_up steps will be equal to " << warming_up_steps << endl; }
+        } else warming_up_steps = 0;
+        if (debug) cout << "warming_up_steps is " << warming_up_steps << endl;
 
         // sign_move
         vector<string> options {"+", "-"};
@@ -514,9 +522,11 @@ Point Cleng::preparePivotClampedMove(int id_node_for_move) {
     return clamped_move;
 }
 
-bool Cleng::MakeMove(bool back) {
+bool Cleng::MakeMove(bool back, bool warming_up) {
     if (debug) cout << "MakeMove in Cleng" << endl;
     bool success = true;
+
+    if (warming_up) cout << "WARMING UP IS HAPPENING!!! " << endl;
 
     if (back) {
         cout << internal_name << "Moving back...";
@@ -671,6 +681,17 @@ bool Cleng::MonteCarlo(bool save_vector) {
     vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
     save2h5("free_energy", dims_3, MC_free_energy);
 #endif
+    // WARMING UP
+    for (int MC_attempt_warming_up = 1; MC_attempt_warming_up <= warming_up_steps; MC_attempt_warming_up++) { // main loop for trials
+        cout << "[WARMING UP step:" << MC_attempt_warming_up << "]" << endl;
+        bool success_move_warmup = MakeMove(false, true);
+        if (success_move_warmup) {
+            CP(to_segment);
+    }}
+    // clean up
+    accepted = 0.0;
+    rejected = 0.0;
+    cleng_rejected = 0.0;
 
     cout << "Initialization done.\n" << endl;
     Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
@@ -772,6 +793,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
                         accepted++;
                     } else {
                         Real acceptance = rand.getReal(0, 1);
+                        cout << "Acceptance threshold: " << acceptance << endl;
 
                         if (acceptance < exp((-1.0/prefactor_kT) * (free_energy_trial - free_energy_current))) {
                             cout << internal_name << metropolis_name << "Accepted with probability" << endl;
@@ -839,7 +861,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
             phi_vector.clear(); nr_vector.clear();
             for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
             Write2File(MC_attempt+MCS_checkpoint, "phi", phi_vector);
-            Write2File(MC_attempt+MCS_checkpoint, "nr", phi_vector);
+            Write2File(MC_attempt+MCS_checkpoint, "nr",  nr_vector);
 
 #ifdef CLENG_EXPERIMENTAL
             save2h5vtk();

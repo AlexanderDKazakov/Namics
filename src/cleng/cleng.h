@@ -31,11 +31,16 @@
 
 #include <csignal>
 
+#ifdef CLENG_EXPERIMENTAL
+static const string EXPERIMENTAL="[EXPERIMENTAL]";
+#else
+static const string EXPERIMENTAL="";
+#endif
 static const string CLENG_MAJOR_VERSION = "1";
 static const string CLENG_MINOR_VERSION = "4";
 static const string CLENG_PATCH = "4";
 static const string CLENG_INTERNAL_VERSION = "154";
-static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ")";
+static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ") " + EXPERIMENTAL;
 
 class Cleng {
 private:
@@ -154,6 +159,7 @@ public:
     Real rejected{};
     Real cleng_rejected{};
     int MC_attempt{};
+    int warming_up_steps{};
 
     vector<Real> test_vector;
 
@@ -161,7 +167,7 @@ public:
 
     bool CP(transfer);
 
-    bool MakeMove(bool back);
+    bool MakeMove(bool back, bool warming_up = false);
 
     bool MakeChecks(int id_node_for_move);
 
