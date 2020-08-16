@@ -39,7 +39,7 @@ static const string EXPERIMENTAL="";
 static const string CLENG_MAJOR_VERSION = "1";
 static const string CLENG_MINOR_VERSION = "4";
 static const string CLENG_PATCH = "4";
-static const string CLENG_INTERNAL_VERSION = "154";
+static const string CLENG_INTERNAL_VERSION = "155";
 static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ") " + EXPERIMENTAL;
 
 class Cleng {
@@ -160,6 +160,11 @@ public:
     Real cleng_rejected{};
     int MC_attempt{};
     int warming_up_steps{};
+    //
+    Real warming_up_steps_done{};
+    int _rejected_steps_counter{};
+    bool do_warming_up_stage{};
+    bool warming_up_stage{};
 
     vector<Real> test_vector;
 

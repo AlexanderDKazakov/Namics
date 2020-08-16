@@ -46,6 +46,7 @@ Cleng::Cleng(
     KEYS.emplace_back("pivot+one_bond");
     KEYS.emplace_back("h5");
     KEYS.emplace_back("warming_up_steps");
+    KEYS.emplace_back("warming_up_stage");
 
     // Debug.log
     //out.open("debug.out", ios_base::out);
@@ -209,10 +210,15 @@ bool Cleng::CheckInput(int start, bool save_vector) {
 
         // warming_up_steps
         if (!GetValue("warming_up_steps").empty()) {
-            success = In[0]->Get_int(GetValue("warming_up_steps"), warming_up_steps, 1, 1000, "The seed should be between 1 and 1000");
+            success = In[0]->Get_int(GetValue("warming_up_steps"), warming_up_steps, 1, 1000, "The warming_up_steps should be between 1 and 1000");
             if (!success) { warming_up_steps = 10; cout << "The warming_up steps will be equal to " << warming_up_steps << endl; }
-        } else warming_up_steps = 0;
+        } else warming_up_steps = 10;
         if (debug) cout << "warming_up_steps is " << warming_up_steps << endl;
+
+        // warming_up stage
+        if (!GetValue("warming_up_stage").empty()) do_warming_up_stage = In[0]->Get_bool(GetValue("warming_up_stage"), false);
+        else do_warming_up_stage = false;
+        if (debug) cout << "do_warming_up_stage " << do_warming_up_stage << endl;
 
         // sign_move
         vector<string> options {"+", "-"};
@@ -526,8 +532,6 @@ bool Cleng::MakeMove(bool back, bool warming_up) {
     if (debug) cout << "MakeMove in Cleng" << endl;
     bool success = true;
 
-    if (warming_up) cout << "WARMING UP IS HAPPENING!!! " << endl;
-
     if (back) {
         cout << internal_name << "Moving back...";
         string _nodes;
@@ -538,7 +542,7 @@ bool Cleng::MakeMove(bool back, bool warming_up) {
         cout << _nodes << " [Moved back]" << endl;
     } else {
         nodeIDs_clampedMove.clear();
-        if (pivot_move) {
+        if (pivot_move and !warming_up_stage) {
             if (pivot_one_bond) {
                 int type_move = rand.getInt(0, 1);
                 if (type_move) success = _pivotMoveClampedNode(false);
@@ -553,6 +557,7 @@ bool Cleng::MakeMove(bool back, bool warming_up) {
                 success = _pivotMoveClampedNode(false);
             }
         } else {
+            // Warming_up stage too
             success = _oneNodeMoveClampedNode(false);
         }
     }
@@ -650,6 +655,9 @@ bool Cleng::MonteCarlo(bool save_vector) {
     rejected = 0.0;
     cleng_rejected = 0.0;
     MC_attempt = 0; // initial value for loop and cleng_writer
+    warming_up_steps_done   = 0;
+    _rejected_steps_counter = 0;
+    warming_up_stage = false;
     make_BC();
 
 // init system outlook
@@ -681,17 +689,17 @@ bool Cleng::MonteCarlo(bool save_vector) {
     vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
     save2h5("free_energy", dims_3, MC_free_energy);
 #endif
-    // WARMING UP
-    for (int MC_attempt_warming_up = 1; MC_attempt_warming_up <= warming_up_steps; MC_attempt_warming_up++) { // main loop for trials
-        cout << "[WARMING UP step:" << MC_attempt_warming_up << "]" << endl;
-        bool success_move_warmup = MakeMove(false, true);
-        if (success_move_warmup) {
-            CP(to_segment);
-    }}
-    // clean up
-    accepted = 0.0;
-    rejected = 0.0;
-    cleng_rejected = 0.0;
+//    // WARMING UP
+//    for (int MC_attempt_warming_up = 1; MC_attempt_warming_up <= warming_up_steps; MC_attempt_warming_up++) { // main loop for trials
+//        cout << "[WARMING UP step:" << MC_attempt_warming_up << "]" << endl;
+//        bool success_move_warmup = MakeMove(false, true);
+//        if (success_move_warmup) {
+//            CP(to_segment);
+//    }}
+//    // clean up
+//    accepted = 0.0;
+//    rejected = 0.0;
+//    cleng_rejected = 0.0;
 
     cout << "Initialization done.\n" << endl;
     Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
@@ -716,6 +724,18 @@ bool Cleng::MonteCarlo(bool save_vector) {
         cout << internal_name <<  "Here we go..." << endl;
         bool success_move;
         for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
+            // warming up procedure is required for the system next N steps all rejected HARD TESTING
+            if (do_warming_up_stage) {
+                if (_rejected_steps_counter > 10) {
+                    warming_up_stage = true;
+                    warming_up_steps_done++;
+                    // back to normal mode
+                    if (_rejected_steps_counter % warming_up_steps == 0) _rejected_steps_counter = 0;
+                } else {
+                    warming_up_stage = false;
+                }
+            }
+
             success_move = MakeMove(false);
             if (success_move) {
                 CP(to_segment);
@@ -800,6 +820,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
                             free_energy_current = free_energy_trial;
                             n_times_mu = GetN_times_mu();
                             accepted++;
+                            _rejected_steps_counter = 0; // reset if one accepted
                         } else {
                             cout << internal_name << metropolis_name << "Rejected" << endl;
                             MakeMove(true);
@@ -808,6 +829,9 @@ bool Cleng::MonteCarlo(bool save_vector) {
                             New[0]->Solve(true);
                             // TODO check cleng returned to normal numbers... [2nd solution]
                             rejected++;
+                            //
+                            _rejected_steps_counter ++;
+                            //
                             cout << "... [Done]" << endl;
                         }
                     }
@@ -821,6 +845,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 cout << "           Accepted: # " << setw(2) << accepted       << " | " << setw(2) << 100 * (accepted / MC_attempt)       << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
                 cout << "           Rejected: # " << setw(2) << rejected       << " | " << setw(2) << 100 * (rejected / MC_attempt)       << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
                 cout << "     Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+                cout << "   Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
             }
 
             if (success_move) {
@@ -884,11 +909,12 @@ bool Cleng::MonteCarlo(bool save_vector) {
         }  // main loop
 
         cout << endl;
-        cout << "Finally:" << endl;
-        cout << internal_name << analysis_name << "Monte Carlo attempts: " << MC_attempt-1 << endl;
-        cout << internal_name << analysis_name << "Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (accepted / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
-        cout << internal_name << analysis_name << "Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (rejected / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
-        cout << internal_name << analysis_name << "Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+        cout << "[Finally]" << endl;
+        cout << internal_name << analysis_name << "Monte Carlo attempts:   " << MC_attempt-1 << endl;
+        cout << internal_name << analysis_name << "            Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (accepted / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
+        cout << internal_name << analysis_name << "            Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (rejected / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
+        cout << internal_name << analysis_name << "      Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+        cout << internal_name << analysis_name << "    Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
 
     }
 
