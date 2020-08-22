@@ -135,6 +135,7 @@ public:
     vector<int> ids_node4fix;
     std::chrono::steady_clock::time_point t0_simulation;
     std::chrono::steady_clock::time_point t1_simulation;
+    int tpure_simulation;
     int MCS_checkpoint = 0;
     bool loaded = false;
     string save_filename;

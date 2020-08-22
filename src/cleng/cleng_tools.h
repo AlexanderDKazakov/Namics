@@ -480,7 +480,7 @@ void Cleng::WriteClampedNodeDistanceWithCenter(int num) {
     // all distances are collected
     ofstream outfile;
     outfile.open(filename + ".cdis2c", std::ios_base::app);
-    outfile << num << " ";
+    outfile << num << " " << tpure_simulation << " ";
     for (auto &&value : distPerMC) outfile << value << " ";
     outfile << endl;
 }

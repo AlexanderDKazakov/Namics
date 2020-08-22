@@ -530,6 +530,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
     make_BC();
 
 // init system outlook
+    auto t0_noanalysis_simulation = std::chrono::steady_clock::now();
     if (!loaded) {
         CP(to_cleng);
         if (pivot_move) {ids_node4fix.clear();ids_node4fix.push_back(pivot_arm_nodes[1][0]);}
@@ -545,9 +546,12 @@ bool Cleng::MonteCarlo(bool save_vector) {
         exit(1);
     }
     if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
-
+    auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
+//std::chrono::duration_cast<std::chrono::seconds> (t1_simulation - t0_simulation).count() 
+    tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
 // init save
     WriteOutput(MC_attempt + MCS_checkpoint);
+    if (cleng_dis) WriteClampedNodeDistanceWithCenter(MC_attempt + MCS_checkpoint);
     if (cleng_dis) WriteClampedNodeDistance(MC_attempt + MCS_checkpoint);
     if (cleng_pos) WriteClampedNodePosition(MC_attempt + MCS_checkpoint);
 
@@ -563,8 +567,9 @@ bool Cleng::MonteCarlo(bool save_vector) {
     Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
     int requested_layers = (box.x / 2);
     Analyzer analyzer = Analyzer(requested_layers, core);
-
+    
     if (MCS) {
+        t0_noanalysis_simulation = std::chrono::steady_clock::now();
 
         update_ids_node4move();
         cout << internal_name << "System: " << endl;
@@ -720,6 +725,8 @@ bool Cleng::MonteCarlo(bool save_vector) {
             if (success_move) {
                 auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
                 cout << internal_name << "Saving... " << num << endl;
+                t1_noanalysis_simulation = std::chrono::steady_clock::now();
+                tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
                 if ((int(num) % delta_save) == 0) WriteOutput(int(num));
                 if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
                 if (cleng_dis) WriteClampedNodeDistanceWithCenter(int(num));
