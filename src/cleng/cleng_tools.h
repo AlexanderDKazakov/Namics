@@ -461,7 +461,27 @@ void Cleng::WriteClampedNodeDistance(int num) {
     ofstream outfile;
     outfile.open(filename + ".cdis", std::ios_base::app);
     outfile << num << " ";
-    for (auto n : distPerMC)outfile << n << " ";
+    for (auto n : distPerMC) outfile << n << " ";
+    outfile << endl;
+}
+
+void Cleng::WriteClampedNodeDistanceWithCenter(int num) {
+    vector<Real> distPerMC;
+    int central_node_id = pivot_arm_nodes[1].begin()[0];
+    Point central_node  = nodes_map[central_node_id].data()->get()->point();
+    for (auto &&pair_arm_nodes : pivot_arm_nodes) {
+        for (auto &&node_id : pair_arm_nodes.second) {
+            if ( central_node_id != node_id ) {
+                Point node = nodes_map[node_id].data()->get()->point();
+                distPerMC.push_back(central_node.distance(node));
+            }
+        }
+    }
+    // all distances are collected
+    ofstream outfile;
+    outfile.open(filename + ".cdis2c", std::ios_base::app);
+    outfile << num << " ";
+    for (auto &&value : distPerMC) outfile << value << " ";
     outfile << endl;
 }
 
@@ -486,7 +506,7 @@ void Cleng::WriteClampedNodePosition(int num) {
     }
 }
 
-void Cleng::Write2File(int step, string what, Real value) {
+void Cleng::Write2File(int step, const string& what, Real value) const {
 
     ofstream outfile;
     outfile.open(filename + "." +what, std::ios_base::app);
@@ -495,7 +515,7 @@ void Cleng::Write2File(int step, string what, Real value) {
     outfile << step << " " << value << endl;
 }
 
-void Cleng::Write2File(int step, string what, vector<Real> values) {
+void Cleng::Write2File(int step, const string& what, const vector<Real>& values) const {
 
     ofstream outfile;
     outfile.open(filename + "." +what, std::ios_base::app);
@@ -518,6 +538,29 @@ Real Cleng::GetN_times_mu() {
         n_times_mu += n * Mu;
     }
     return n_times_mu;
+}
+
+string Cleng::GetValue(const string& parameter) {
+    int i = 0;
+    int length = (int) PARAMETERS.size();
+    while (i < length) {
+        if (parameter == PARAMETERS[i]) {
+            return VALUES[i];
+        }
+        i++;
+    }
+    return "";
+}
+
+void Cleng::update_ids_node4move() {
+    vector<int> _ = ids_node4move;
+    if (!ids_node4fix.empty()) {
+        ids_node4move.clear();
+        for (auto const &n_: nodes_map) {
+            bool exists = any_of(begin(ids_node4fix), end(ids_node4fix), [&](int i) { return i == n_.first; });
+            if (!exists) ids_node4move.push_back(n_.first);
+        }
+    }
 }
 
 #ifdef CLENG_EXPERIMENTAL

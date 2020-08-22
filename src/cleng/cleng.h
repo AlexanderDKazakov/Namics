@@ -2,7 +2,7 @@
 #define CLENGxH
 
 #include "../input.h"
-#include "../namics.h"
+//#include "../namics.h"
 #include "../solve_scf.h"
 #include "../system.h"
 #include "../output.h"
@@ -21,6 +21,7 @@
 #include "nodes/monolit.h"
 #include "nodes/point.h"
 #include "analyzer/analyzer.h"
+#include "mc_engines/mc_engine.h"
 //#include "matrix.h"
 #include "checkpoint/checkpoint.h"
 #include "random/random.h"
@@ -132,8 +133,8 @@ public:
     bool two_ends_extension{};
     vector<int> ids_node4move;
     vector<int> ids_node4fix;
-    std::chrono::steady_clock::time_point begin_simulation;
-    std::chrono::steady_clock::time_point end_simulation;
+    std::chrono::steady_clock::time_point t0_simulation;
+    std::chrono::steady_clock::time_point t1_simulation;
     int MCS_checkpoint = 0;
     bool loaded = false;
     string save_filename;
@@ -143,6 +144,7 @@ public:
     vector<Output *> Out;
     vector<int> P;
     vector<shared_ptr<SimpleNode>> simpleNodeList;
+    vector<shared_ptr<SimpleNode>> simpleNodeList_store;
     map<int, vector<std::shared_ptr<Node>>> nodes_map;
 
 
@@ -199,13 +201,15 @@ public:
     void PushOutput(int num);
 
     void WriteOutput(int num);
+    
+    void WriteClampedNodeDistanceWithCenter(int num);
 
     void WriteClampedNodeDistance(int num);
 
     void WriteClampedNodePosition(int num);
     
-    void Write2File(int step, string what, Real value);
-    void Write2File(int step, string what, vector<Real> values);
+    void Write2File(int step, const string& what, Real value) const;
+    void Write2File(int step, const string& what, const vector<Real>& values) const;
 
     void make_BC();
 

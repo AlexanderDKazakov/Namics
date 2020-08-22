@@ -1,5 +1,6 @@
 #include "cleng.h"
 #include "cleng_tools.h"
+#include "cleng_moves.h"
 
 using namespace std;
 
@@ -47,6 +48,7 @@ Cleng::Cleng(
     KEYS.emplace_back("h5");
     KEYS.emplace_back("warming_up_steps");
     KEYS.emplace_back("warming_up_stage");
+    KEYS.emplace_back("mc_engine");
 
     // Debug.log
     //out.open("debug.out", ios_base::out);
@@ -58,18 +60,6 @@ Cleng::~Cleng() {
     delete[] zs;
     // Debug.log closing
     //out.close();
-}
-
-string Cleng::GetValue(const string& parameter) {
-    int i = 0;
-    int length = (int) PARAMETERS.size();
-    while (i < length) {
-        if (parameter == PARAMETERS[i]) {
-            return VALUES[i];
-        }
-        i++;
-    }
-    return "";
 }
 
 bool Cleng::CheckInput(int start, bool save_vector) {
@@ -270,7 +260,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         else two_ends_extension = false;
         if (debug) cout << "two_ends_extension " << two_ends_extension << endl;
 
-        // checkpoint save
+        // metropolis enable/disable
         if (!GetValue("metropolis").empty()) {metropolis = In[0]->Get_bool(GetValue("metropolis"), false);}
         else metropolis = true;
         if (debug) cout << "metropolis " << metropolis << endl;
@@ -347,20 +337,16 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         filename = In[0]->output_info.getOutputPath() + sub[0];
 
         cout << CLENG_VERSION << endl;
+        t0_simulation = std::chrono::steady_clock::now();
         success = MonteCarlo(save_vector);
+        t1_simulation= std::chrono::steady_clock::now();
+        std::cout << "# It took (s) = " << std::chrono::duration_cast<std::chrono::seconds> (t1_simulation - t0_simulation).count() <<
+                  " or (m) = " << std::chrono::duration_cast<std::chrono::minutes> (t1_simulation - t0_simulation).count() <<
+                  " or (h) = " << std::chrono::duration_cast<std::chrono::hours> (t1_simulation - t0_simulation).count() << std::endl;
+
+        cout << "Have a fun. " << endl;
     }
     return success;
-}
-
-void Cleng::update_ids_node4move() {
-    vector<int> _ = ids_node4move;
-    if (!ids_node4fix.empty()) {
-        ids_node4move.clear();
-        for (auto const &n_: nodes_map) {
-            bool exists = any_of(begin(ids_node4fix), end(ids_node4fix), [&](int i) { return i == n_.first; });
-            if (!exists) ids_node4move.push_back(n_.first);
-        }
-    }
 }
 
 bool Cleng::CP(transfer tofrom) {
@@ -395,6 +381,7 @@ bool Cleng::CP(transfer tofrom) {
                 size_t index = SN.first;    //
                 if (index % 2 == 1) continue;
                 size_t n_box = index / 2;   // n_boxes
+
                 Point p1 = SN.second->point();                // all time in box [0:box_l]
                 Point p2 = SN.second->get_cnode()->point();   // all time in box [0:box_l]
 
@@ -467,67 +454,6 @@ bool Cleng::Checks(int id_node_for_move) {
     return result;
 }
 
-bool Cleng::MakeChecks(int id_node_for_move) {
-    bool success = true;
-    while (!Checks(id_node_for_move)) {
-        cout << internal_name << "Prepared MC step for the node ["<< id_node_for_move << "] does not pass checks. Rejected." << endl;
-        MakeMove(true);
-        cleng_rejected++;
-        success = false;
-        return success; // TODO: CHECK THIS RETURN
-    }
-    return success;
-}
-
-void Cleng::_moveClampedNode(bool back, int id_node_for_move, const Point& clamped_move) {
-    if (back) {
-        Point _clamped_move = clamped_move.negate();
-        if (!simultaneously) nodes_map[id_node_for_move].data()->get()->shift(_clamped_move);
-        else for (auto &node : nodes_map) node.second.data()->get()->shift(_clamped_move);
-    } else {
-        if (!simultaneously) {
-            cout << "[Prepared node] id: " << id_node_for_move << " clamped_move: " << clamped_move.to_string() << "... ";
-            nodes_map[id_node_for_move].data()->get()->shift(clamped_move);
-            cout << "[Moved]" << endl;
-        } else {
-            // simultaneously procedure (+ two_ends_extension)
-            if (two_ends_extension) {
-                // TODO: deprecate in future...
-                for (auto &&node : nodes_map) {
-                    int index = node.first;
-                    if (index % 2 == 0) node.second.data()->get()->shift(clamped_move.negate());
-                    else node.second.data()->get()->shift(clamped_move);
-                }
-                cout << "[Moved] " << "*All* "
-                << "MC step: " << clamped_move.to_string() << " and " << clamped_move.negate().to_string() << endl;
-            } else {
-                for (auto &&node : nodes_map) node.second.data()->get()->shift(clamped_move);
-                cout << "[Moved] " << "*All* " << "MC step: " << clamped_move.to_string() << endl;
-            }
-        }
-    }
-}
-
-Point Cleng::preparePivotClampedMove(int id_node_for_move) {
-    Point center_of_rotation = nodes_map[pivot_node_ids[0]].data()->get()->point();
-    // moving center of rotation to the center
-    for (auto &&node : nodes_map) node.second.data()->get()->shift(center_of_rotation.negate());
-    Point current_Point = nodes_map[id_node_for_move].data()->get()->_returnSystemPoint();
-    Point point_shifted_by_matrix = rotation_matrix.dot(current_Point);
-    Point clamped_move = point_shifted_by_matrix - current_Point;
-    // center +1
-    if (clamped_move.x < -(box.x / 2) +1) clamped_move.x += box.x;
-    if (clamped_move.y < -(box.y / 2) +1) clamped_move.y += box.y;
-    if (clamped_move.z < -(box.z / 2) +1) clamped_move.z += box.z;
-
-    if (clamped_move.x > (box.x / 2)+1) clamped_move.x -= box.x;
-    if (clamped_move.y > (box.y / 2)+1) clamped_move.y -= box.y;
-    if (clamped_move.z > (box.z / 2)+1) clamped_move.z -= box.z;
-    // moving center of rotation to initial place
-    for (auto &&node : nodes_map) node.second.data()->get()->shift(center_of_rotation);
-    return clamped_move;
-}
-
 bool Cleng::MakeMove(bool back, bool warming_up) {
     if (debug) cout << "MakeMove in Cleng" << endl;
     bool success = true;
@@ -564,68 +490,11 @@ bool Cleng::MakeMove(bool back, bool warming_up) {
     return success;
 }
 
-bool Cleng::_pivotMoveClampedNode(const bool &back) {
-    Point clamped_move;
-    bool success = true;
-    cout << internal_name << "[pivot_move]" << endl;
-    prepareMove("pivot_move");
-    for (size_t node_position_in_vector=1; node_position_in_vector != pivot_node_ids.size(); node_position_in_vector++) {
-        clamped_move = preparePivotClampedMove(pivot_node_ids[node_position_in_vector]);  // need to create for each node_id!
-        _moveClampedNode(back, pivot_node_ids[node_position_in_vector], clamped_move);
-        nodeIDs_clampedMove[pivot_node_ids[node_position_in_vector]] = clamped_move;
-    }
-    cout << internal_name << "checking positions...";
-    for (auto &&node_id : pivot_node_ids) {
-        success = MakeChecks(node_id);
-        if (!success) return success;
-    }
-    cout << " OK" << endl;
-    return  success;
-}
-
-bool Cleng::_pivotMoveOneBond(const bool &back) {
-    Point clamped_move;
-    bool success = true;
-    cout << internal_name << "[pivot_one_bond]" << endl;
-    clamped_move = prepareMove("pivot_one_bond_move");  // need to create at once and move all
-    for (size_t node_position_in_vector=1; node_position_in_vector != pivot_node_ids.size(); node_position_in_vector++) {
-        _moveClampedNode(back, pivot_node_ids[node_position_in_vector], clamped_move);
-        nodeIDs_clampedMove[pivot_node_ids[node_position_in_vector]] = clamped_move;
-    }
-    cout << internal_name << "checking positions...";
-    for (auto &&node_id : pivot_node_ids) {
-        success = MakeChecks(node_id);
-        if (!success) return success;
-    }
-    cout << " OK" << endl;
-    return  success;
-}
-
-bool Cleng::_oneNodeMoveClampedNode(const bool &back) {
-    int id_node_for_move;
-    Point clamped_move;
-    bool success;
-
-    cout << internal_name << "[one_node_move]" << endl;
-    id_node_for_move = prepareIdNode();
-    clamped_move = prepareMove("one_node_move");
-    _moveClampedNode(back, id_node_for_move, clamped_move);
-    nodeIDs_clampedMove[id_node_for_move] = clamped_move;
-
-    cout << internal_name << "checking positions...";
-    success = MakeChecks(id_node_for_move);
-    if (!success) return success;
-    nodeIDs_clampedMove[id_node_for_move] = clamped_move;
-    cout << " OK" << endl;
-    return success;
-}
-
-
 // Main procedure
 bool Cleng::MonteCarlo(bool save_vector) {
     if (debug) cout << "Monte Carlo in Cleng" << endl;
     bool success = true;
-    begin_simulation = std::chrono::steady_clock::now();
+
 
     signal(SIGINT, signalHandler);
 #ifdef CLENG_EXPERIMENTAL
@@ -689,19 +558,8 @@ bool Cleng::MonteCarlo(bool save_vector) {
     vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
     save2h5("free_energy", dims_3, MC_free_energy);
 #endif
-//    // WARMING UP
-//    for (int MC_attempt_warming_up = 1; MC_attempt_warming_up <= warming_up_steps; MC_attempt_warming_up++) { // main loop for trials
-//        cout << "[WARMING UP step:" << MC_attempt_warming_up << "]" << endl;
-//        bool success_move_warmup = MakeMove(false, true);
-//        if (success_move_warmup) {
-//            CP(to_segment);
-//    }}
-//    // clean up
-//    accepted = 0.0;
-//    rejected = 0.0;
-//    cleng_rejected = 0.0;
-
     cout << "Initialization done.\n" << endl;
+    // central node of the star
     Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
     int requested_layers = (box.x / 2);
     Analyzer analyzer = Analyzer(requested_layers, core);
@@ -724,7 +582,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
         cout << internal_name <<  "Here we go..." << endl;
         bool success_move;
         for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
-            // warming up procedure is required for the system next N steps all rejected HARD TESTING
+            // warming up procedure is required for the system next N steps all rejected TODO: HARD TESTING
             if (do_warming_up_stage) {
                 if (_rejected_steps_counter > 10) {
                     warming_up_stage = true;
@@ -737,9 +595,11 @@ bool Cleng::MonteCarlo(bool save_vector) {
             }
 
             success_move = MakeMove(false);
+
             if (success_move) {
                 CP(to_segment);
 
+                // notification user
                 cout << endl;
                 cout << internal_name << "System for calculation: " << endl;
                 for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
@@ -754,7 +614,10 @@ bool Cleng::MonteCarlo(bool save_vector) {
                     cout << endl;
                 }
 
+                // SCF PART
                 success_iteration = New[0]->Solve(true);
+
+                // breakpoint of free energy value
                 //// Simulation without rescue procedure --->
                 if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
                     cout << "%?% Sorry, Free Energy is NaN. " << endl;
@@ -794,13 +657,17 @@ bool Cleng::MonteCarlo(bool save_vector) {
 //                } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
 
                 //// Simulation with rescue procedure <---
+
+                // TESTING
                 if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
 
+                // notification
                 cout << "Free Energy (c): " << free_energy_current << endl;
                 cout << "            (t): " << free_energy_trial   << endl;
                 cout << "   prefactor kT: " << prefactor_kT        << endl;
                 cout << endl;
 
+                // Metropolis
                 if (!metropolis) {
                     cout << "Metropolis is disabled. " << endl;
                     free_energy_current = free_energy_trial;
@@ -836,10 +703,11 @@ bool Cleng::MonteCarlo(bool save_vector) {
                         }
                     }
                 }
+                // Metropolis ends
             }
 
+            // notification
             cout << internal_name << analysis_name << endl;
-
             if (metropolis) {
                 cout << "Monte Carlo attempt: " << MC_attempt << endl;
                 cout << "           Accepted: # " << setw(2) << accepted       << " | " << setw(2) << 100 * (accepted / MC_attempt)       << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
@@ -848,11 +716,13 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 cout << "   Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
             }
 
+            // Saving data
             if (success_move) {
                 auto num = MC_attempt + MCS_checkpoint - cleng_rejected;
                 cout << internal_name << "Saving... " << num << endl;
                 if ((int(num) % delta_save) == 0) WriteOutput(int(num));
                 if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
+                if (cleng_dis) WriteClampedNodeDistanceWithCenter(int(num));
                 if (cleng_dis) WriteClampedNodeDistance(int(num));
                 if (cleng_pos) WriteClampedNodePosition(int(num));
             }
@@ -894,7 +764,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
             n_times_mu = GetN_times_mu();
             vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
             save2h5("free_energy", dims_3, MC_free_energy);
-            // Not working yet.
+            // Not working yet.  TODO: FIX IT
             //// ReRg2
             //vector<Real> MC_ReRg2 = {static_cast<Real>(MC_attempt+MCS_checkpoint), Re_value, Rg2_value};
             //save2h5("ReRg2", dims_3, MC_ReRg2);
@@ -917,12 +787,5 @@ bool Cleng::MonteCarlo(bool save_vector) {
         cout << internal_name << analysis_name << "    Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
 
     }
-
-    end_simulation= std::chrono::steady_clock::now();
-    std::cout << "# It took (s) = " << std::chrono::duration_cast<std::chrono::seconds> (end_simulation - begin_simulation).count() <<
-    " or (m) = " << std::chrono::duration_cast<std::chrono::minutes> (end_simulation - begin_simulation).count() <<
-    " or (h) = " << std::chrono::duration_cast<std::chrono::hours> (end_simulation - begin_simulation).count() << std::endl;
-
-    cout << "Have a fun. " << endl;
     return success;
 }
