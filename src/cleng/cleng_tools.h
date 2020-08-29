@@ -352,7 +352,7 @@ Matrix<T> Cleng::_create_scaling_matrix(Real scaling_coef) {
     return scaling_matrix_;
 }
 
-int Cleng::getLastMCS() {
+int Cleng::getLastMCS() const {
 
     int MC_attemp = 0;
 
@@ -515,15 +515,16 @@ void Cleng::Write2File(int step, const string& what, Real value) const {
     outfile << step << " " << value << endl;
 }
 
-void Cleng::Write2File(int step, const string& what, const vector<Real>& values) const {
+void Cleng::Write2File(int step, const string& what, const vector<Real>& values, bool same_line) const {
 
     ofstream outfile;
     outfile.open(filename + "." +what, std::ios_base::app);
 
+    string delim = (same_line ? " " : "\n");
 //    cout
-    outfile << step << endl;;
+    outfile << step << delim;
     for (auto const& v : values) {
-        outfile << v << endl;
+        outfile << v << delim;
     }
     outfile << endl;
 }
@@ -562,6 +563,91 @@ void Cleng::update_ids_node4move() {
         }
     }
 }
+
+
+Real Cleng::getFreeEnergyBox() {
+    Real F_total  = 0.0;
+    Real dist     = 0.0;
+    Real chi      = 0.0;
+    //
+    int mon_pol_id    = 0;
+    int mon_sol_id    = 0;
+    //int mon_clamp_id  = 0;
+    //
+    int mol_pol_id = 0;
+    //int mol_sol_id = 0;
+    int chain_len = 0;
+    // through arms
+    for (auto &&arm : pivot_arm_nodes) {
+ //       cout << "arm: " << arm.first << endl;
+
+        // through arm nodes
+        for (int idx=1; idx < (int)arm.second.size(); ++idx)
+        {
+            int id1 = arm.second[idx-1];
+            int id2 = arm.second[idx];
+            
+            //dist
+            dist = nodes_map[id1].data()->get()->point().distance(nodes_map[id2].data()->get()->point());
+            //cout << "Pair: " << "["<< id1 <<"]" << nodes_map[id1].data()->get()->point().to_string()
+            //     << " & "    << "["<< id2 <<"]" << nodes_map[id2].data()->get()->point().to_string()
+            //     << "dist:"  << dist;
+            //cout << endl;
+            
+            //chi
+            // find polymer segment [typically it A] // TODO: implement interface for providing polymer mon
+            for (size_t seg_idx=0; seg_idx < Seg.size(); seg_idx++)
+            {
+                //cout << "id: " << seg_idx << " Seg[id]_name: " << Seg[seg_idx]->name << endl;;
+                if (Seg[seg_idx]->name == "W") mon_sol_id   = seg_idx;
+                if (Seg[seg_idx]->name == "A") mon_pol_id   = seg_idx;
+                //if (Seg[seg_idx]->name == "X") mon_clamp_id = seg_idx;
+            }
+            chi = Seg[mon_pol_id]->chi[mon_sol_id];
+            //cout << "CHI: " << chi << endl;
+
+            // len
+            for (size_t mol_idx=0; mol_idx < Mol.size(); mol_idx++) 
+            {
+                if (Mol[mol_idx]->name == "pol")   mol_pol_id = mol_idx;
+                //if (Mol[mol_idx]->name == "water") mol_sol_id = mol_idx;
+            }
+            chain_len = Mol[mol_pol_id]->chainlength;
+            //cout << "chain_len:" << chain_len << endl;
+            //
+            //Real proposed_free_energy = getFreeEnergyBox(chain_len,pow(dist,3),chi);
+            Real proposed_free_energy = calcFreeEnergyBox(chain_len-2,dist,chi);
+            F_total += proposed_free_energy;
+        }
+    }
+    return F_total;
+}
+
+Real Cleng::calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi) {
+    Real F      = 0;
+    Real F_conf = 0;
+    Real F_int  = 0;
+    Real kT = 1;
+    Real nu = 1;
+    if (chi==0.0) nu = 0.6;
+    if (chi==0.5) nu = 0.5;
+    if (chi>0.5)  nu = 0.3;
+    //F_conf = N * ( (pow(R,2) / (2.0*pow(N,2)) ) - log( 1.0 - (pow(R,2)/pow(N,2)) ) ) / kT;
+    F_conf = 3/2 * pow(R,2) / N;
+    //cout << "F_conf:" << F_conf << endl;
+    //Real V = pow(R,3);
+    //Real V = 2*R + N;
+    //Real V = pow(R,5/2);
+
+    Real V = pow(R * pow(N, nu), 3);
+    //Real V = pow(Nu), 3);
+    //cout << "V:" << V << endl;
+    F_int  = V * ( ( (1-(N/V))*log(1.0 - (N/V)) ) + chi * N/V * (1.0 - (N/V) )) / kT;
+    //cout << "F_int:" << F_int << endl;
+    F = F_conf + F_int;
+    return F;
+}
+
 
 #ifdef CLENG_EXPERIMENTAL
     void Cleng::save2h5vtk() {

@@ -48,7 +48,12 @@ Cleng::Cleng(
     KEYS.emplace_back("h5");
     KEYS.emplace_back("warming_up_steps");
     KEYS.emplace_back("warming_up_stage");
+    //
     KEYS.emplace_back("mc_engine");
+    //
+    KEYS.emplace_back("inner_loop_each");
+    KEYS.emplace_back("mcs");
+    KEYS.emplace_back("start_inner_loop_from");
 
     // Debug.log
     //out.open("debug.out", ios_base::out);
@@ -75,6 +80,41 @@ bool Cleng::CheckInput(int start, bool save_vector) {
             if (!success) { MCS = 1; cout << "MCS will be equal to " << MCS << endl; }
         } else MCS = 0;
         if (debug) cout << "MCS is " << MCS << endl;
+        
+        // mcs
+        if (!GetValue("mcs").empty()) {
+            success = In[0]->Get_int(GetValue("mcs"), mcs, 1, 10000000, "The number of inner Monte Carlo steps should be between 1 and 10_000_000;");
+            if (!success) { mcs = 10; cout << "Inner mcs will be equal to " << mcs << endl; }
+        } else mcs = 0;
+        if ( (MCS == 0) && (mcs != 0) ) {
+            cout << "[WARNING] MCS equals to zero, however inner loop is not zero." << endl;
+            cout << "   -->>   inner loop will be set to zero too." << endl;
+            cout << "   -->>   use MCS value instead." << endl;
+            mcs = 0;
+        }
+        if (debug) cout << "mcs is " << mcs << endl;
+
+        // start_inner_loop_from SILF
+        if (!GetValue("start_inner_loop_from").empty()) {
+            success = In[0]->Get_int(GetValue("start_inner_loop_from"), SILF, 1, MCS, "Starting point for inner loop should be between 1 and MCS flag.");
+            if (!success) { SILF = 1; cout << "Starting point for inner loop will be equal to " << SILF << endl; }
+        } else SILF = 0;
+        if ( (mcs != 0 ) && (SILF == 0) ) {
+            SILF = 1;
+            cout << "[WARNING] You should provided 'start_inner_loop_from' flag for inner MC loop [mcs flag]." << endl;
+            cout << "   -->>   'start_inner_loop_from' will be equal to " << SILF << endl;
+        }
+        if (debug) cout << "SILF is " << SILF << endl;
+
+        // inner_loop_each ILE
+        if (!GetValue("inner_loop_each").empty()) {
+            success = In[0]->Get_int(GetValue("inner_loop_each"), ILE, 1, MCS, "Entrance to inner loop should be between 1 and MCS flag;");
+            if (!success) { ILE = 1; cout << "ILE will be equal to " << ILE << endl; }
+        } else ILE = 0;
+        if ( (ILE == 0) && (mcs != 0) ) {
+            ILE = 1;
+        }
+        if (debug) cout << "ILE is " << ILE << endl;
 
         // seed
         if (!GetValue("seed").empty()) {
@@ -198,14 +238,14 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         } else axis = 0;
         if (debug) cout << "movement_along axis " << axis << endl;
 
-        // warming_up_steps
+        // warming_up_steps  NOT IMPLEMENTED
         if (!GetValue("warming_up_steps").empty()) {
             success = In[0]->Get_int(GetValue("warming_up_steps"), warming_up_steps, 1, 1000, "The warming_up_steps should be between 1 and 1000");
             if (!success) { warming_up_steps = 10; cout << "The warming_up steps will be equal to " << warming_up_steps << endl; }
         } else warming_up_steps = 10;
         if (debug) cout << "warming_up_steps is " << warming_up_steps << endl;
 
-        // warming_up stage
+        // warming_up stage  NOT IMPLEMENTED
         if (!GetValue("warming_up_stage").empty()) do_warming_up_stage = In[0]->Get_bool(GetValue("warming_up_stage"), false);
         else do_warming_up_stage = false;
         if (debug) cout << "do_warming_up_stage " << do_warming_up_stage << endl;
@@ -468,7 +508,7 @@ bool Cleng::MakeMove(bool back, bool warming_up) {
         cout << _nodes << " [Moved back]" << endl;
     } else {
         nodeIDs_clampedMove.clear();
-        if (pivot_move and !warming_up_stage) {
+        if (pivot_move) {
             if (pivot_one_bond) {
                 int type_move = rand.getInt(0, 1);
                 if (type_move) success = _pivotMoveClampedNode(false);
@@ -519,14 +559,13 @@ bool Cleng::MonteCarlo(bool save_vector) {
         }
     }
 
+// MAIN
+//
 // Analysis MC
     accepted = 0.0;
     rejected = 0.0;
     cleng_rejected = 0.0;
     MC_attempt = 0; // initial value for loop and cleng_writer
-    warming_up_steps_done   = 0;
-    _rejected_steps_counter = 0;
-    warming_up_stage = false;
     make_BC();
 
 // init system outlook
@@ -541,13 +580,13 @@ bool Cleng::MonteCarlo(bool save_vector) {
     bool success_iteration = New[0]->Solve(true);
     free_energy_current = Sys[0]->GetFreeEnergy();
     if (is_ieee754_nan(free_energy_current)) {
-        cout << "%?% Sorry, Free Energy is NaN. Termination..." << endl;
-        cout << "%?% Solver output " << success_iteration       << endl;
+        cout << "#?# Sorry, Free Energy is NaN. Termination..." << endl;
+        cout << "#?# Solver output " << success_iteration       << endl;
         exit(1);
     }
     if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
     auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
-//std::chrono::duration_cast<std::chrono::seconds> (t1_simulation - t0_simulation).count() 
+
     tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
 // init save
     WriteOutput(MC_attempt + MCS_checkpoint);
@@ -562,12 +601,13 @@ bool Cleng::MonteCarlo(bool save_vector) {
     vector<Real> MC_free_energy = {static_cast<Real>(MC_attempt+MCS_checkpoint), free_energy_current, free_energy_current-n_times_mu};
     save2h5("free_energy", dims_3, MC_free_energy);
 #endif
-    cout << "Initialization done.\n" << endl;
+    cout << "Initialization --> done.\n" << endl;
     // central node of the star
     Point core = nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point();
     int requested_layers = (box.x / 2);
     Analyzer analyzer = Analyzer(requested_layers, core);
     
+    //Real box_coeff = 0.0;
     if (MCS) {
         t0_noanalysis_simulation = std::chrono::steady_clock::now();
 
@@ -578,7 +618,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
         if (pivot_move) {
             cout << internal_name << "System [pivot -> stars only]: " << endl;
             for (auto &&pair_pivot : pivot_arm_nodes) {
-                cout << "---> arm: " << pair_pivot.first << " ids: ";
+                cout << "--> arm: " << pair_pivot.first << " ids: ";
                 for (auto &&ids: pair_pivot.second) cout << ids << " ";
                 cout << endl;
             }
@@ -586,19 +626,11 @@ bool Cleng::MonteCarlo(bool save_vector) {
         }
         cout << internal_name <<  "Here we go..." << endl;
         bool success_move;
-        for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
-            // warming up procedure is required for the system next N steps all rejected TODO: HARD TESTING
-            if (do_warming_up_stage) {
-                if (_rejected_steps_counter > 10) {
-                    warming_up_stage = true;
-                    warming_up_steps_done++;
-                    // back to normal mode
-                    if (_rejected_steps_counter % warming_up_steps == 0) _rejected_steps_counter = 0;
-                } else {
-                    warming_up_stage = false;
-                }
-            }
 
+        // OUTER LOOP
+        for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
+
+            // standard behavior
             success_move = MakeMove(false);
 
             if (success_move) {
@@ -625,10 +657,10 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 // breakpoint of free energy value
                 //// Simulation without rescue procedure --->
                 if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
-                    cout << "%?% Sorry, Free Energy is NaN. " << endl;
-                    cout << "%?% Here is result from solver: " << success_iteration << endl;
+                    cout << "#?# Sorry, Free Energy is NaN. " << endl;
+                    cout << "#?# Here is result from solver: " << success_iteration << endl;
 
-                    cout << "%?% The step will be rejected! "
+                    cout << "#?# The step will be rejected! "
                             "Probably your system is too dense! "
                             "Simulation will stop... " << endl;
                     cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
@@ -666,11 +698,62 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 // TESTING
                 if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
 
+                // // Real F_proposed_init = getFreeEnergyBox();
+                // // // INNER_LOOP
+                // // if (MC_attempt > SILF) {  // Starting point for inner MC
+                // //     if (MC_attempt % ILE == 0) {  // if this just right MC_attepm --> entering to inner loop 
+                // //         for (int mc_attempt = 0; mc_attempt < mcs; mc_attempt++){
+                // //             cout << "[" << mc_attempt << "] I AM IN INNER LOOP!" << endl;
+                // //             success_move = MakeMove(false);
+                // //             if (success_move) {CP(to_segment);}
+                // //         }
+                // //     Real F_proposed_final = getFreeEnergyBox();
+                // //     }
+                // // }
+                // // // END INNER LOOP
+
+                // // // SCF PART
+                // // success_iteration = New[0]->Solve(true);
+
+                // // // breakpoint of free energy value
+                // // //// Simulation without rescue procedure --->
+                // // if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+                // //     cout << "#?# Sorry, Free Energy is NaN. " << endl;
+                // //     cout << "#?# Here is result from solver: " << success_iteration << endl;
+
+                // //     cout << "#?# The step will be rejected! "
+                // //             "Probably your system is too dense! "
+                // //             "Simulation will stop... " << endl;
+                // //     cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
+                // //     MakeMove(true);
+                // //     cleng_rejected++;
+                // //     break;
+                // // } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+                // // //// Simulation without rescue procedure <---
+
+                //// INNER LOOP
+                // Real box_coeff = 0.0;  // Reset for new inner loop
+                //Real F_proposed = getFreeEnergyBox();
+                //cout << "Proposed Free_energy [trial]:" << F_proposed << endl;
+                //if (!box_coeff) {
+                //    box_coeff = F_proposed - free_energy_current;
+                //}
+                //// END INNER LOOP
+                
                 // notification
                 cout << "Free Energy (c): " << free_energy_current << endl;
                 cout << "            (t): " << free_energy_trial   << endl;
                 cout << "   prefactor kT: " << prefactor_kT        << endl;
                 cout << endl;
+
+                //// SAVING _INNER LOOP
+                //vector<Real> mc_energy_vector; 
+                //mc_energy_vector.clear(); 
+                //mc_energy_vector.push_back(free_energy_trial);
+                //mc_energy_vector.push_back(F_proposed);
+                //mc_energy_vector.push_back(F_proposed-box_coeff);
+                //Write2File(MC_attempt+MCS_checkpoint, "test_SCF_box", mc_energy_vector, true);
+                //// END _INNER LOOP
 
                 // Metropolis
                 if (!metropolis) {
@@ -680,19 +763,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 } else {
                     if (free_energy_trial - free_energy_current <= 0.0) {
                         cout << internal_name << metropolis_name << "Accepted" << endl;
-                        n_times_mu = GetN_times_mu();
                         free_energy_current = free_energy_trial;
                         accepted++;
                     } else {
                         Real acceptance = rand.getReal(0, 1);
-                        cout << "Acceptance threshold: " << acceptance << endl;
 
                         if (acceptance < exp((-1.0/prefactor_kT) * (free_energy_trial - free_energy_current))) {
                             cout << internal_name << metropolis_name << "Accepted with probability" << endl;
                             free_energy_current = free_energy_trial;
-                            n_times_mu = GetN_times_mu();
                             accepted++;
-                            _rejected_steps_counter = 0; // reset if one accepted
                         } else {
                             cout << internal_name << metropolis_name << "Rejected" << endl;
                             MakeMove(true);
@@ -702,14 +781,14 @@ bool Cleng::MonteCarlo(bool save_vector) {
                             // TODO check cleng returned to normal numbers... [2nd solution]
                             rejected++;
                             //
-                            _rejected_steps_counter ++;
-                            //
                             cout << "... [Done]" << endl;
                         }
                     }
                 }
                 // Metropolis ends
             }
+            // END standard behavior
+            
 
             // notification
             cout << internal_name << analysis_name << endl;
@@ -718,7 +797,6 @@ bool Cleng::MonteCarlo(bool save_vector) {
                 cout << "           Accepted: # " << setw(2) << accepted       << " | " << setw(2) << 100 * (accepted / MC_attempt)       << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
                 cout << "           Rejected: # " << setw(2) << rejected       << " | " << setw(2) << 100 * (rejected / MC_attempt)       << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
                 cout << "     Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
-                cout << "   Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
             }
 
             // Saving data
@@ -746,13 +824,13 @@ bool Cleng::MonteCarlo(bool save_vector) {
             Real nr_check_sum = 0, phi_check_sum = 0;
             map<int, vector<Real>> phi = analyzer.calculatePhi();
             for (auto const& pair : phi) {
-                cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
+                //cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
                 nr_check_sum  += pair.second[0];
                 phi_check_sum += pair.second[1];
-                for (auto const& value : pair.second) {
-                    cout << value << " ";
-                }
-                cout << endl;
+                //for (auto const& value : pair.second) {
+                //    cout << value << " ";
+                //}
+                //cout << endl;
             }
             cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
 
@@ -791,7 +869,6 @@ bool Cleng::MonteCarlo(bool save_vector) {
         cout << internal_name << analysis_name << "            Accepted: # " << setw(2) << accepted << " | " << setw(2) << 100 * (accepted / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (accepted / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
         cout << internal_name << analysis_name << "            Rejected: # " << setw(2) << rejected << " | " << setw(2) << 100 * (rejected / (MC_attempt-1)) << "%" << " | " << setw(2) << 100 * (rejected / ( (MC_attempt-1-cleng_rejected))) << "%" << endl;
         cout << internal_name << analysis_name << "      Cleng_rejected: # " << setw(2) << cleng_rejected << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
-        cout << internal_name << analysis_name << "    Warming_up steps: # " << setw(2) << warming_up_steps_done << " | " << setw(2) << 100 * (warming_up_steps_done / MC_attempt) << "%" << endl;
 
     }
     return success;

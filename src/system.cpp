@@ -1108,7 +1108,7 @@ void System::PushOutput()
 		push("chi-"+Seg[i]->name+"-"+Seg[j]->name,CHI[i * n_seg + j]);
 	}
 	if (Lat[0]->gradients == 1 && Lat[0]->geometry == "planar") {
-		push("KJ0", -Lat[0]->Moment(GrandPotentialDensity, 1));
+	    push("KJ0", -Lat[0]->Moment(GrandPotentialDensity, 1));
 		push("Kbar", Lat[0]->Moment(GrandPotentialDensity, 2));
 	}
 	Real X = 0;
@@ -1199,7 +1199,7 @@ Real *System::GetPointer(string s, int &SIZE)
 		return q;
 	if (sub[1] == "5")
 		return eps;
-	return NULL;
+	return nullptr;
 }
 int *System::GetPointerInt(string s, int &SIZE)
 {
@@ -1210,7 +1210,7 @@ int *System::GetPointerInt(string s, int &SIZE)
 	if (sub[0] == "array")
 	{ //set SIZE and return pointer of int array
 	}
-	return NULL;
+	return nullptr;
 }
 
 int System::GetValue(string prop, int &int_result, Real &Real_result, string &string_result)
@@ -1865,7 +1865,6 @@ Real System::GetFreeEnergy(void)
 		Norm(TEMP, -1, M);
 		Add(F, TEMP, M);
 	}
-
 	for (int j = 0; j < n_seg; j++)
 	{
 		if (Seg[j]->ns < 2)

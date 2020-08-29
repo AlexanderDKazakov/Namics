@@ -101,6 +101,9 @@ public:
     int n_out{};
     Point sub_box_size;
     int MCS{};
+    int SILF{};
+    int ILE{};
+    int mcs{};
     int delta_step{};
     int pivot_move{};
     int pivot_axis{};
@@ -210,11 +213,11 @@ public:
     void WriteClampedNodePosition(int num);
     
     void Write2File(int step, const string& what, Real value) const;
-    void Write2File(int step, const string& what, const vector<Real>& values) const;
+    void Write2File(int step, const string& what, const vector<Real>& values, bool same_line = false) const;
 
     void make_BC();
 
-    int getLastMCS();
+    int getLastMCS() const;
 
     void update_ids_node4move();
 
@@ -243,6 +246,9 @@ public:
     string GetValue(const string&);
 
     Real GetN_times_mu();
+
+    Real calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi);
+    Real getFreeEnergyBox();
 
 #ifdef CLENG_EXPERIMENTAL
     void save2h5vtk();
