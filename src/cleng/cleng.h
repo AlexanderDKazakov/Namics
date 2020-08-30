@@ -38,9 +38,9 @@ static const string EXPERIMENTAL="[EXPERIMENTAL]";
 static const string EXPERIMENTAL="";
 #endif
 static const string CLENG_MAJOR_VERSION = "1";
-static const string CLENG_MINOR_VERSION = "4";
-static const string CLENG_PATCH = "4";
-static const string CLENG_INTERNAL_VERSION = "155";
+static const string CLENG_MINOR_VERSION = "6";
+static const string CLENG_PATCH = "1";
+static const string CLENG_INTERNAL_VERSION = "175";
 static const string CLENG_VERSION = CLENG_MAJOR_VERSION + "." + CLENG_MINOR_VERSION + "." + CLENG_PATCH + " (v." + CLENG_INTERNAL_VERSION + ") " + EXPERIMENTAL;
 
 class Cleng {
@@ -138,7 +138,7 @@ public:
     vector<int> ids_node4fix;
     std::chrono::steady_clock::time_point t0_simulation;
     std::chrono::steady_clock::time_point t1_simulation;
-    int tpure_simulation;
+    int tpure_simulation{};
     int MCS_checkpoint = 0;
     bool loaded = false;
     string save_filename;
@@ -161,8 +161,7 @@ public:
     Real free_energy_current{};
     Real free_energy_trial{};
 
-    Real accepted{};
-    Real rejected{};
+
     Real cleng_rejected{};
     int MC_attempt{};
     int warming_up_steps{};
@@ -247,8 +246,16 @@ public:
 
     Real GetN_times_mu();
 
-    Real calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi);
+    static Real calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi);
     Real getFreeEnergyBox();
+
+    bool solveAndCheckFreeEnergy();
+
+    bool initSystemOutlook(Checkpoint& checkpoint, bool save_vector);
+
+    void notification();
+
+    void save(int num, Analyzer& analyzer);
 
 #ifdef CLENG_EXPERIMENTAL
     void save2h5vtk();

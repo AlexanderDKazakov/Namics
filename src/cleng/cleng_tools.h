@@ -554,7 +554,6 @@ string Cleng::GetValue(const string& parameter) {
 }
 
 void Cleng::update_ids_node4move() {
-    vector<int> _ = ids_node4move;
     if (!ids_node4fix.empty()) {
         ids_node4move.clear();
         for (auto const &n_: nodes_map) {
@@ -633,7 +632,7 @@ Real Cleng::calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi) {
     if (chi==0.5) nu = 0.5;
     if (chi>0.5)  nu = 0.3;
     //F_conf = N * ( (pow(R,2) / (2.0*pow(N,2)) ) - log( 1.0 - (pow(R,2)/pow(N,2)) ) ) / kT;
-    F_conf = 3/2 * pow(R,2) / N;
+    F_conf = 3.0/2.0 * pow(R,2) / N;
     //cout << "F_conf:" << F_conf << endl;
     //Real V = pow(R,3);
     //Real V = 2*R + N;
@@ -648,6 +647,150 @@ Real Cleng::calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi) {
     return F;
 }
 
+bool Cleng::solveAndCheckFreeEnergy() {
+    bool success = true;
+    bool success_iteration = New[0]->Solve(true);
+    // breakpoint of free energy value
+    //// Simulation without rescue procedure --->
+    if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+        cout << "#?# Sorry, Free Energy is NaN. " << endl;
+        cout << "#?# Here is result from solver: " << success_iteration << endl;
+
+        cout << "#?# The step will be rejected! "
+                "Probably your system is too dense! "
+                "Simulation will stop... " << endl;
+        cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
+        MakeMove(true);
+        cleng_rejected++;
+        success = false;
+    } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+    //// Simulation without rescue procedure <---
+
+    //// Simulation with rescue procedure --->
+//                if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+//                    cout << "%?% Sorry, Free Energy is NaN.  " << endl;
+//                    cout << "%?% Here is result from solver: " << success_iteration << endl;
+// //                    New[0]->rescue_status = NONE;  # TODO need to rescue?
+//                    New[0]->attempt_DIIS_rescue();
+//                    cout << "%?% Restarting iteration." << endl;
+//                    success_iteration = New[0]->Solve(true);
+
+//                    if (is_ieee754_nan(Sys[0]->GetFreeEnergy())) {
+//                        cout << "%?% Sorry, Free Energy is still NaN. " << endl;
+//                        cout << "%?% Here is result from solver: " << success_iteration << endl;
+
+//                        cout << "%?% The step will be rejected! "
+//                                "Probably your system is too dense! "
+//                                "Simulation will continue... " << endl;
+//                        cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
+//                        MakeMove(true);
+//                        cleng_rejected++;
+//                        continue;
+//                    }
+//                } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+
+    //// Simulation with rescue procedure <---
+
+    return success;
+}
+
+bool Cleng::initSystemOutlook(Checkpoint& checkpoint, bool save_vector) {
+    bool success = true;
+
+    auto t0_noanalysis_simulation = std::chrono::steady_clock::now();
+    if (!loaded) {
+        CP(to_cleng);
+        if (pivot_move) {ids_node4fix.clear();ids_node4fix.push_back(pivot_arm_nodes[1][0]);}
+    }
+    if (!Checks(0)) {cout << internal_name << "Some checks are not passed. Termination..." << endl; exit(1); }
+    if (checkpoint_save) {checkpoint.saveCheckpoint(simpleNodeList);}
+
+    success = solveAndCheckFreeEnergy();
+    if (!success) exit(1);
+    free_energy_current = Sys[0]->GetFreeEnergy();
+
+    if (save_vector) test_vector.push_back(free_energy_current);
+
+    auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
+    tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
+
+    return success;
+}
+
+void Cleng::notification() {
+    cout << internal_name << "System for calculation: " << endl;
+    for (auto &&n : nodes_map) cout << "Node id: " << n.first << " " << n.second.data()->get()->to_string() << endl;
+    cout << endl;
+    if (pivot_move) {
+        cout << internal_name << "System [pivot -> stars only]: " << endl;
+        for (auto &&pair_pivot : pivot_arm_nodes) {
+            cout << "--> arm: " << pair_pivot.first << " ids: ";
+            for (auto &&ids: pair_pivot.second) cout << ids << " ";
+            cout << endl;
+        }
+        cout << endl;
+    }
+}
+
+void Cleng::save(int num, Analyzer& analyzer) {
+
+    cout << internal_name << "Saving... " << num << endl;
+
+    if ((int(num) % delta_save) == 0) WriteOutput(num);
+    if (cleng_dis) WriteClampedNodeDistanceWithCenter(num);
+    if (cleng_dis) WriteClampedNodeDistance(num);
+    if (cleng_pos) WriteClampedNodePosition(num);
+
+
+    vector<Real> vtk;
+    vtk.clear();
+    vtk = prepare_vtk("mol", "pol", "phi");
+    analyzer.updateVtk2PointsRepresentation(vtk, box);
+    // Re
+    Real Re_value = Analyzer::calculateRe(pivot_arm_nodes, nodes_map);
+    // Rg
+    Real Rg2_value = analyzer.calculateRg();
+    // phi
+    Real nr_check_sum = 0, phi_check_sum = 0;
+    map<int, vector<Real>> phi = analyzer.calculatePhi();
+    for (auto const& pair : phi) {
+        //cout << "[phi] Layer: "<< pair.first << " | value[nr, phi]:";
+        nr_check_sum  += pair.second[0];
+        phi_check_sum += pair.second[1];
+        //for (auto const& value : pair.second) {
+        //    cout << value << " ";
+        //}
+        //cout << endl;
+    }
+    cout << "Total [nr]: " << nr_check_sum << " | [phi]:" << phi_check_sum << endl;
+
+    Write2File(num, "re",  Re_value);
+    Write2File(num, "rg2", Rg2_value);
+
+    vector<Real> phi_vector; vector<Real> nr_vector;
+    phi_vector.clear(); nr_vector.clear();
+    for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
+    Write2File(num, "phi", phi_vector);
+    Write2File(num, "nr",  nr_vector);
+
+#ifdef CLENG_EXPERIMENTAL
+    save2h5vtk();
+    // free energy calculation
+    n_times_mu = GetN_times_mu();
+    vector<Real> MC_free_energy = {static_cast<Real>(num), free_energy_current, free_energy_current-n_times_mu};
+    save2h5("free_energy", dims_3, MC_free_energy);
+    // Not working yet.  TODO: FIX IT
+    //// ReRg2
+    //vector<Real> MC_ReRg2 = {static_cast<Real>(MC_attempt+MCS_checkpoint), Re_value, Rg2_value};
+    //save2h5("ReRg2", dims_3, MC_ReRg2);
+    //// phi
+    //vector<Real> phi_vector; vector<Real> nr_vector;
+    //for (auto const& pair : phi) {nr_vector.push_back(pair.second[0]); phi_vector.push_back(pair.second[1]);}
+    //save2h5("phi/phi"+to_string(MC_attempt+MCS_checkpoint), dims_phi, phi_vector);
+    //save2h5("nr/nr"+to_string(MC_attempt+MCS_checkpoint), dims_phi, nr_vector);
+#endif
+
+}
 
 #ifdef CLENG_EXPERIMENTAL
     void Cleng::save2h5vtk() {

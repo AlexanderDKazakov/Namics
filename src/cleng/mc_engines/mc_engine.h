@@ -35,7 +35,7 @@ public:
 class MC_engine
 {
 public:
-    MC_engine(int input = 1) : ptrmcEngineBase(nullptr)
+    explicit MC_engine(int input = 1) : ptrmcEngineBase(nullptr)
     {
         ptrmcEngineBase = mc_engine_base::Create(input);
     }

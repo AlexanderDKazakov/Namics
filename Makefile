@@ -1,6 +1,6 @@
 #Compiler and Linker
 ifdef GCC
-CC          :=g++-7
+CC          :=g++-8
 else
 CC			:=g++
 endif
