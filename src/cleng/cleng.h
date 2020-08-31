@@ -2,7 +2,6 @@
 #define CLENGxH
 
 #include "../input.h"
-//#include "../namics.h"
 #include "../solve_scf.h"
 #include "../system.h"
 #include "../output.h"
@@ -25,12 +24,11 @@
 //#include "matrix.h"
 #include "checkpoint/checkpoint.h"
 #include "random/random.h"
+#include <csignal>
 
 #ifdef CLENG_EXPERIMENTAL
 #include "cwriter/cwriter.h"
 #endif
-
-#include <csignal>
 
 #ifdef CLENG_EXPERIMENTAL
 static const string EXPERIMENTAL="[EXPERIMENTAL]";
@@ -113,6 +111,7 @@ public:
     bool pivot_one_bond{};
 
     map<int, Point> nodeIDs_clampedMove;
+    vector<map<int, Point>> MC_attempt_nodeIDs_clampedMove_info;
     map<int, vector<int>> pivot_arm_nodes;
 
     vector<vector<string>> out_per_line;
@@ -177,7 +176,7 @@ public:
 
     bool CP(transfer);
 
-    bool MakeMove(bool back, bool warming_up = false);
+    bool MakeMove(bool back, bool inner_loop = false);
 
     bool MakeChecks(int id_node_for_move);
 
