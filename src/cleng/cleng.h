@@ -64,6 +64,7 @@ private:
     #endif
 
     void fillXYZ();
+    void _save_differences(int mcs_done, Real SCF_free_energy_trial, Real F_proposed) const;
 
 public:
     Cleng(
@@ -163,6 +164,7 @@ public:
 
     Real cleng_rejected{};
     int MC_attempt{};
+    int mcs_done{};
     int warming_up_steps{};
     //
     Real warming_up_steps_done{};

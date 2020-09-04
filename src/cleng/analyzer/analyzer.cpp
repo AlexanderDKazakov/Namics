@@ -166,14 +166,12 @@ bool Analyzer::Metropolis(Random& rand,
 
     if (free_energy_trial - free_energy_current <= 0.0) {
         cout << internal_name << metropolis_name << "Accepted" << endl;
-        free_energy_current = free_energy_trial;
         this->accepted++;
     } else {
         Real acceptance = rand.getReal(0, 1);
 
         if (acceptance < exp((-1.0/prefactor_kT) * (free_energy_trial - free_energy_current))) {
             cout << internal_name << metropolis_name << "Accepted with probability" << endl;
-            free_energy_current = free_energy_trial;
             accepted++;
         } else {
             cout << internal_name << metropolis_name << "Rejected" << endl;
@@ -189,5 +187,5 @@ void Analyzer::notification(int MC_attempt, int cleng_rejected) const {
     cout << internal_name << "Monte Carlo attempt: " << MC_attempt << endl;
     cout << "                      Accepted: # " << setw(2) << accepted        << " | " << setw(2) << 100 * (accepted / MC_attempt)       << "%" << setw(2) << " | " << 100 * (accepted / (MC_attempt - cleng_rejected) ) << "%" << endl;
     cout << "                      Rejected: # " << setw(2) << rejected        << " | " << setw(2) << 100 * (rejected / MC_attempt)       << "%" << setw(2) << " | " << 100 * (rejected / (MC_attempt - cleng_rejected) ) << "%" << endl;
-    cout << "                Cleng_rejected: # " << setw(2) << cleng_rejected  << " | " << setw(2) << 100 * (cleng_rejected / MC_attempt) << "%" << endl;
+    cout << "                Cleng_rejected: # " << setw(2) << cleng_rejected  << " | " << setw(2) << 100 * (static_cast<Real>(cleng_rejected) / static_cast<Real>(MC_attempt)) << "%" << endl;
 }

@@ -98,7 +98,7 @@ bool Cleng::CheckInput(int start, bool save_vector) {
         if (!GetValue("start_inner_loop_from").empty()) {
             success = In[0]->Get_int(GetValue("start_inner_loop_from"), SILF, 1, MCS, "Starting point for inner loop should be between 1 and MCS flag.");
             if (!success) { SILF = 1; cout << "Starting point for inner loop will be equal to " << SILF << endl; }
-        } else SILF = 0;
+        } else SILF = MCS+5;
         if ( (mcs != 0 ) && (SILF == 0) ) {
             SILF = 1;
             cout << "[WARNING] You should provided 'start_inner_loop_from' flag for inner MC loop [mcs flag]." << endl;
@@ -473,27 +473,6 @@ bool Cleng::CP(transfer tofrom) {
     return success;
 }
 
-bool Cleng::Checks(int id_node_for_move) {
-    bool in_range;
-
-    bool in_subbox_range = InSubBoxRange(id_node_for_move);
-
-    bool not_collapsing = NotCollapsing(id_node_for_move);
-
-    // check distance between all nodes_map and constrains (walls)
-    // BC.x, BC.y, BC.z = mirror
-    if (BC.x and BC.y and BC.z) in_range = InRange(id_node_for_move);
-    // BC.x and/or BC.y and/or BC.z != mirror
-    else in_range = true;
-
-    // check distances between all nodes_map => checking possibility to achieve clamped nodes
-    bool commensurate = IsCommensuratable();
-
-    bool result = not_collapsing and in_range and in_subbox_range and commensurate;
-//    cout << "[Checks] result: " << result << endl;
-    return result;
-}
-
 bool Cleng::MakeMove(bool back, bool inner_loop) {
     if (debug) cout << "MakeMove in Cleng" << endl;
     bool success = true;
@@ -501,31 +480,43 @@ bool Cleng::MakeMove(bool back, bool inner_loop) {
     if (back) {
         cout << internal_name << "Moving back...";
         string _nodes;
-        for (auto &&nodeID_clampedMove : nodeIDs_clampedMove) {
-            _nodes +=  " " + to_string(nodeID_clampedMove.first);
-            _moveClampedNode(back, nodeID_clampedMove.first, nodeID_clampedMove.second);
+        // reverse order of movements
+        reverse(MC_attempt_nodeIDs_clampedMove_info.begin(), MC_attempt_nodeIDs_clampedMove_info.end()); 
+        // go through MC attempts
+        for (auto &&nodeIDs_clampedMove_per_MC : MC_attempt_nodeIDs_clampedMove_info) {
+            for (auto &&nodeID_clampedMove : nodeIDs_clampedMove_per_MC) {
+                _nodes +=  " " + to_string(nodeID_clampedMove.first);
+                _moveClampedNode(back, nodeID_clampedMove.first, nodeID_clampedMove.second);
+            }
         }
         cout << _nodes << " [Moved back]" << endl;
+        MC_attempt_nodeIDs_clampedMove_info.clear();
     } else {
         nodeIDs_clampedMove.clear();
-        if (pivot_move) {
-            if (pivot_one_bond) {
-                int type_move = rand.getInt(0, 1);
-                if (type_move) success = _pivotMoveClampedNode(false);
-                else success = _pivotMoveOneBond(false);
-            }
-            if (pivot_one_node) {
-                int type_move = rand.getInt(0, 1);
-                if (type_move) success = _pivotMoveClampedNode(false);
-                else success = _oneNodeMoveClampedNode(false);
-            }
-            if (!pivot_one_node and !pivot_one_bond) {
-                success = _pivotMoveClampedNode(false);
-            }
-        } else {
+        if (inner_loop) {
             success = _oneNodeMoveClampedNode(false);
+        } else {
+            if (pivot_move) {
+                if (pivot_one_bond) {
+                    int type_move = rand.getInt(0, 1);
+                    if (type_move) success = _pivotMoveClampedNode(false);
+                    else success = _pivotMoveOneBond(false);
+                }
+                if (pivot_one_node) {
+                    int type_move = rand.getInt(0, 1);
+                    if (type_move) success = _pivotMoveClampedNode(false);
+                    else success = _oneNodeMoveClampedNode(false);
+                }
+                if (!pivot_one_node and !pivot_one_bond) {
+                    success = _pivotMoveClampedNode(false);
+                }
+            } else {
+                success = _oneNodeMoveClampedNode(false);
+            }
         }
-        if (inner_loop) MC_attempt_nodeIDs_clampedMove_info.push_back(nodeIDs_clampedMove);
+
+        MC_attempt_nodeIDs_clampedMove_info.push_back(nodeIDs_clampedMove);
+        //if (inner_loop) MC_attempt_nodeIDs_clampedMove_info.push_back(nodeIDs_clampedMove);
     }
     return success;
 }
@@ -559,6 +550,7 @@ bool Cleng::MonteCarlo(bool save_vector) {
     }
 
     MC_attempt = 0; // initial value for loop and cleng_writer in init outlook
+    mcs_done   = 0; // initial value for loop and _save_differences
     make_BC();      // check boundary conditions
 
 // init system outlook
@@ -566,12 +558,15 @@ bool Cleng::MonteCarlo(bool save_vector) {
     success = initSystemOutlook(checkpoint, save_vector);
     if (!success) exit(1);
 
+    free_energy_current = Sys[0]->GetFreeEnergy();
+    if (save_vector) test_vector.push_back(free_energy_current);
+
     // central node of the star
     Analyzer analyzer = Analyzer(box.x / 2,
                                  nodes_map[pivot_arm_nodes[1].begin()[0]].data()->get()->point());
 
     // init save
-    save(MC_attempt + MCS_checkpoint, analyzer);
+    save(MC_attempt+MCS_checkpoint, analyzer);
     cout << "Initialization --> done.\n" << endl;
 
     if (MCS) {
@@ -581,68 +576,174 @@ bool Cleng::MonteCarlo(bool save_vector) {
         cout << internal_name <<  "Here we go..." << endl;
         bool success_move;
 
+        Real F_proposed_init = 0.0;
+        Real SCF_init  = 0.0;
+
+        Real F_proposed_final = 0.0;
+        Real SCF_final = 0.0;
+
+        Real correction = 0.0;
+
         for (MC_attempt = 1; MC_attempt <= MCS; MC_attempt++) { // main loop for trials
-            // standard behavior -->
-            success_move = MakeMove(false);
-            if (success_move) {
-                CP(to_segment);
 
-                cout << endl;
-                notification();
-                // SCF PART
-                success = solveAndCheckFreeEnergy(); // free_energy_current and trial
-                if (!success) break;
-                // TESTING
-                if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
-                
-                // notification
-                cout << "Free Energy (c): " << free_energy_current << endl;
-                cout << "            (t): " << free_energy_trial   << endl;
-                cout << "   prefactor kT: " << prefactor_kT        << endl;
-                cout << endl;
+            if (MC_attempt <= SILF) {
+                // standard behavior -->
+                success_move = MakeMove(false);
+                if (success_move) {
+                    CP(to_segment);
+                    cout << endl;
+                    notification();
+                    success = solveAndCheckFreeEnergy(); // free energy is not Nan
+                    if (!success) break;
 
-                // SAVING _INNER LOOP  // check the differences.
-                Real F_proposed = getFreeEnergyBox();
-                vector<Real> mc_energy_vector;
-                mc_energy_vector.clear();
-                mc_energy_vector.push_back(free_energy_trial);
-                mc_energy_vector.push_back(F_proposed);
-                Write2File(MC_attempt+MCS_checkpoint, "test_SCF_box", mc_energy_vector, true);
-                // END _INNER LOOP
+                    free_energy_trial = Sys[0]->GetFreeEnergy();
+                    // TESTING
+                    if (save_vector) test_vector.push_back(Sys[0]->GetFreeEnergy());
+                    // notification
+                    cout << "Free Energy (c): " << free_energy_current << endl;
+                    cout << "            (t): " << free_energy_trial << endl;
+                    cout << "   prefactor kT: " << prefactor_kT << endl;
+                    cout << endl;
 
-                // Metropolis
+                    Real F_proposed = getFreeEnergyBox();
+                    _save_differences(0, free_energy_trial, F_proposed);
+
+                    if (!metropolis) {
+                        cout << "Metropolis is disabled. " << endl;
+                        analyzer.accepted++;
+                    } else {
+                        if (MC_attempt <= SILF) { // check inner loop is working
+                            cout << "[METROPOLIS]" << endl;
+                            success = analyzer.Metropolis(rand, prefactor_kT, free_energy_trial, free_energy_current);
+                        }
+
+                        if (success) {
+                            MC_attempt_nodeIDs_clampedMove_info.clear(); // clean before the next step
+                            SCF_init = free_energy_current = free_energy_trial;
+                        }
+                        else { // rejection the trial step
+                            MakeMove(true);
+                            CP(to_segment);
+                            success = solveAndCheckFreeEnergy(); //
+                            if (!success) break;
+                            // TODO check cleng returned to normal numbers... [2nd solution]
+                            SCF_init = Sys[0]->GetFreeEnergy();  // for inner loop
+                            cout << "... [Done]" << endl;
+                        }
+                    }
+
+                    // notification
+                    if (metropolis) { analyzer.notification(MC_attempt, cleng_rejected); }
+
+                    // Saving data
+                    auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
+                    tpure_simulation = std::chrono::duration_cast<std::chrono::seconds>(
+                            t1_noanalysis_simulation - t0_noanalysis_simulation).count();
+                    save(int(MC_attempt + MCS_checkpoint), analyzer);
+                    if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
+                }
+                // <-- standard behavior
+            } else {
+                // INNER_LOOP
+                // Starting point for inner MC
+                if (MC_attempt % ILE == 0) {         // if this just right MC_attempt --> entering to inner loop
+
+                    F_proposed_init = getFreeEnergyBox(); // current proposed free energy
+                    if ( (!correction) || ( MC_attempt % 1000 == 0) ) {
+                        correction = abs(F_proposed_init - SCF_init);  // absolute diff
+                        if (F_proposed_init > SCF_init) correction = -correction;
+                        cout << "Coefficient:" << correction << endl;
+                    }
+
+                    // inner loop
+                    vector<Real> mcs_values;
+                    for (int mc_attempt = 0; mc_attempt < mcs; mc_attempt++) {
+                        cout << "[" << mc_attempt << "] ";
+                        success_move = MakeMove(false, true);  // storing all mc_attempt
+                        if (success_move) {
+                            CP(to_segment);
+                            mcs_values.push_back(getFreeEnergyBox() + correction); // add value if the move is okay!
+                        }
+                        else {
+                            MakeMove(true, true); // restoring all mc_attempt back
+                            mc_attempt = 0;                      // repeat --> leads to an increase cleng_rejects
+                            mcs_values.clear();                  // clearing
+                        }
+                    }
+                    cout << endl;
+                    // saving initial and last before the last one
+                    int mcs_done_ = mcs_done;
+                    for (size_t idx = 0; idx < mcs_values.size(); idx++) {
+                        _save_differences(static_cast<int>(mcs_done_+idx+1),
+                                          nan("1"),
+                                          mcs_values[idx]);
+                    }
+                    mcs_done += mcs; // increase mcs done steps
+
+                    // BOX
+                    mcs_done += 1; // for the last one
+                    F_proposed_init = F_proposed_init + correction;
+                    F_proposed_final = getFreeEnergyBox() + correction;
+                    // SCF
+                    success = solveAndCheckFreeEnergy();
+                    if (!success) break;
+                    SCF_final = Sys[0]->GetFreeEnergy();
+
+                    _save_differences(mcs_done, SCF_final, F_proposed_final);
+                } else {
+                    // do standard behaviour;
+                    cout << "Not just right attempt." << endl;
+                }
+                // END INNER LOOP
+
+
                 if (!metropolis) {
                     cout << "Metropolis is disabled. " << endl;
-                    free_energy_current = free_energy_trial;
                     analyzer.accepted++;
                 } else {
-                    success = analyzer.Metropolis(rand, prefactor_kT, free_energy_trial, free_energy_current);
-                    if (!success) { // rejection the trial step
+                    cout << "[METROPOLIS++INNER]" << endl;
+                    Real free_energy_trial_inner = SCF_final + F_proposed_init;
+                    Real free_energy_current_inner = SCF_init + F_proposed_final;
+
+                    // notification
+                    cout << "[Inner] Free Energy (c): " << free_energy_current_inner << endl;
+                    cout << "                    (t): " << free_energy_trial_inner << endl;
+                    cout << "           prefactor kT: " << prefactor_kT << endl;
+                    cout << endl;
+                    success = analyzer.Metropolis(rand, prefactor_kT, free_energy_trial_inner,
+                                                  free_energy_current_inner);
+
+                    if (success) {
+                        MC_attempt_nodeIDs_clampedMove_info.clear(); // clean before the next step
+                        SCF_init = free_energy_current = free_energy_trial;
+                    }
+                    else { // rejection the trial step
                         MakeMove(true);
                         CP(to_segment);
-                        New[0]->Solve(true);
+                        success = solveAndCheckFreeEnergy(); //
+                        if (!success) break;
                         // TODO check cleng returned to normal numbers... [2nd solution]
                         cout << "... [Done]" << endl;
                     }
+
                 }
-                // Metropolis ends
-            }
-            // <-- END standard behavior
+                // notification
+                if (metropolis) {analyzer.notification(MC_attempt, cleng_rejected);}
 
-            // notification
-            if (metropolis) {analyzer.notification(MC_attempt, cleng_rejected);}
-
-            // Saving data
-            if (success_move) {
+                // Saving data
                 auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
                 tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
-                save(int(MC_attempt + MCS_checkpoint - cleng_rejected), analyzer);
+//                save(int(MC_attempt+MCS_checkpoint-cleng_rejected), analyzer);
+                save(int(MC_attempt + MCS_checkpoint), analyzer);
                 if (checkpoint_save) checkpoint.updateCheckpoint(simpleNodeList);
-            }
 
-            // MC nodeIDS_clampedMove info
+            } // <-- INNER
+
+            // MC nodeIDS_clampedMove info TODO CHECK IT--> кажется что тут можно убрать это
+            MC_attempt_nodeIDs_clampedMove_info.clear();
+            cout << "[JUST INFO]" << endl;
             for (size_t idx=0; idx < MC_attempt_nodeIDs_clampedMove_info.size(); idx++) {
-                cout << "MC_attemp: " << idx << endl;
+                cout << "MC_attempt: " << idx << endl;
                 for (auto &&node_id_clamped_move_pair : MC_attempt_nodeIDs_clampedMove_info[idx]) {
                     cout << "Node [" << node_id_clamped_move_pair.first << "]"
                     << node_id_clamped_move_pair.second.to_string() << endl;

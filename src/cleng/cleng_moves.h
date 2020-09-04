@@ -2,6 +2,27 @@
 #ifndef NAMICS_MOVES_H
 #define NAMICS_MOVES_H
 
+bool Cleng::Checks(int id_node_for_move) {
+    bool in_range;
+
+    bool in_subbox_range = InSubBoxRange(id_node_for_move);
+
+    bool not_collapsing = NotCollapsing(id_node_for_move);
+
+    // check distance between all nodes_map and constrains (walls)
+    // BC.x, BC.y, BC.z = mirror
+    if (BC.x and BC.y and BC.z) in_range = InRange(id_node_for_move);
+        // BC.x and/or BC.y and/or BC.z != mirror
+    else in_range = true;
+
+    // check distances between all nodes_map => checking possibility to achieve clamped nodes
+    bool commensurate = IsCommensuratable();
+
+    bool result = not_collapsing and in_range and in_subbox_range and commensurate;
+//    cout << "[Checks] result: " << result << endl;
+    return result;
+}
+
 bool Cleng::MakeChecks(int id_node_for_move) {
     bool success = true;
     while (!Checks(id_node_for_move)) {

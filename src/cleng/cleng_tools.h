@@ -123,11 +123,12 @@ bool Cleng::IsCommensuratable() {
 bool Cleng::NotCollapsing(int id_node_for_move) {
     bool not_collapsing = true;
     Point shifted_point(nodes_map[id_node_for_move].data()->get()->point());
-    double min_dist = 0; // minimal distance between nodes_map. 0 for a while...
+    double min_dist = 0.3; // minimal distance between nodes_map. at least 1. --> too dense --> crash state TODO: write test!
 
     for (auto &&n : nodes_map) {
-        Point test_point = n.second.data()->get()->point();
-        if (shifted_point != test_point) {
+        Point test_point  = n.second.data()->get()->point();
+        int test_point_id = n.first;
+        if ( (shifted_point != test_point) && (id_node_for_move != test_point_id) ) { // not the same as shifted point
             Real distance = shifted_point.distance(n.second.data()->get()->point());
             if (distance <= min_dist) {
                 cout << endl;
@@ -623,26 +624,25 @@ Real Cleng::getFreeEnergyBox() {
 }
 
 Real Cleng::calcFreeEnergyBox(const Real& N, const Real& R, const Real& chi) {
-    Real F      = 0;
-    Real F_conf = 0;
-    Real F_int  = 0;
+    Real F      = 0.0;
+    Real F_conf = 0.0;
+    Real F_int  = 0.0;
     Real kT = 1;
     Real nu = 1;
     if (chi==0.0) nu = 0.6;
     if (chi==0.5) nu = 0.5;
-    if (chi>0.5)  nu = 0.3;
+    if (chi>0.5)  nu = 0.4;  // 0.3
     //F_conf = N * ( (pow(R,2) / (2.0*pow(N,2)) ) - log( 1.0 - (pow(R,2)/pow(N,2)) ) ) / kT;
     F_conf = 3.0/2.0 * pow(R,2) / N;
-    //cout << "F_conf:" << F_conf << endl;
+//    cout << "F_conf:" << F_conf << endl;
     //Real V = pow(R,3);
     //Real V = 2*R + N;
     //Real V = pow(R,5/2);
-
     Real V = pow(R * pow(N, nu), 3);
     //Real V = pow(Nu), 3);
     //cout << "V:" << V << endl;
     F_int  = V * ( ( (1-(N/V))*log(1.0 - (N/V)) ) + chi * N/V * (1.0 - (N/V) )) / kT;
-    //cout << "F_int:" << F_int << endl;
+//    cout << "F_int:" << F_int << endl;
     F = F_conf + F_int;
     return F;
 }
@@ -660,10 +660,8 @@ bool Cleng::solveAndCheckFreeEnergy() {
                 "Probably your system is too dense! "
                 "Simulation will stop... " << endl;
         cout << internal_name << "[CRASH STATE] " << "returning back the system configuration... " << endl;
-        MakeMove(true);
-        cleng_rejected++;
         success = false;
-    } else {free_energy_trial = Sys[0]->GetFreeEnergy();}
+    }
     //// Simulation without rescue procedure <---
 
     //// Simulation with rescue procedure --->
@@ -707,9 +705,6 @@ bool Cleng::initSystemOutlook(Checkpoint& checkpoint, bool save_vector) {
 
     success = solveAndCheckFreeEnergy();
     if (!success) exit(1);
-    free_energy_current = Sys[0]->GetFreeEnergy();
-
-    if (save_vector) test_vector.push_back(free_energy_current);
 
     auto t1_noanalysis_simulation = std::chrono::steady_clock::now();
     tpure_simulation = std::chrono::duration_cast<std::chrono::seconds> (t1_noanalysis_simulation - t0_noanalysis_simulation).count();
@@ -790,6 +785,15 @@ void Cleng::save(int num, Analyzer& analyzer) {
     //save2h5("nr/nr"+to_string(MC_attempt+MCS_checkpoint), dims_phi, nr_vector);
 #endif
 
+}
+
+void Cleng::_save_differences(int mcs_, Real SCF_free_energy_trial, Real F_proposed) const {
+//    Real F_proposed = getFreeEnergyBox();
+    vector<Real> mc_energy_vector;
+    mc_energy_vector.clear();
+    mc_energy_vector.push_back(SCF_free_energy_trial);
+    mc_energy_vector.push_back(F_proposed);
+    Write2File(static_cast<int>(MC_attempt+MCS_checkpoint+mcs_), "test_SCF_box", mc_energy_vector, true);
 }
 
 #ifdef CLENG_EXPERIMENTAL
